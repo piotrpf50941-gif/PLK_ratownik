@@ -1,0 +1,24 @@
+{
+  "name": "Ratownik PLK",
+  "short_name": "Ratownik PLK",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#edf3fb",
+  "theme_color": "#0b4fa2",
+  "lang": "pl",
+  "icons": [
+    {
+      "src": "assets/icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "assets/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "description": "Ratownik PLK — pierwsza pomoc, algorytmy, AED, ratownicy i tryb offline."
+}

@@ -1,0 +1,550 @@
+<!doctype html>
+<html lang="pl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0b4fa2" />
+  <title>Ratownik PLK</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icon.png" />
+  <link rel="apple-touch-icon" href="assets/icon.png" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <img src="assets/logo_plk.png" alt="PKP Polskie Linie Kolejowe S.A. Ratownik" class="logo-img">
+      <div>
+        <h1>Ratownik PLK</h1>
+        <p>Pierwsza pomoc, algorytmy, AED, ratownicy zakładowi, tryb offline i panel administratora</p>
+      </div>
+    </div>
+    <div class="row topbar-actions">
+      <button id="nightModeBtn" class="ghost">🌙 Tryb nocny</button>
+      <button id="topOfflineBtn" class="ghost tech-btn">📴 Offline i numery</button>
+      <button id="appInfoBtn" class="ghost tech-btn" type="button">ℹ️ Informacje o aplikacji</button>
+      <button id="installBtn" class="ghost" hidden>Zainstaluj</button>
+    </div>
+  </header>
+
+  <main class="app">
+    <section class="screen active" id="screen-start">
+      <div id="appNoticeBanner" class="notice-banner" hidden></div>
+      <section id="offlineInlineCard" class="card offline-inline-card" hidden>
+        <div class="card-head wrap-mobile">
+          <h2>Tryb offline — najważniejsze algorytmy</h2>
+          <button class="ghost" id="openOfflineInlineBtn">Otwórz pełny ekran offline</button>
+        </div>
+        <div id="offlineSummaryInline"></div>
+      </section>
+      <section class="hero-grid">
+        <button class="hero danger" id="call112Btn"><span class="hero-icon">🚨</span><span>Zgłoś zdarzenie na 112</span></button>
+        <button class="hero amber" id="call999Btn"><span class="hero-icon">☎️</span><span>Zgłoś zdarzenie na 999</span></button>
+        <button class="hero blue big-panic" id="alarmZoneBtn"><span class="hero-icon">📣</span><span>Zakład - wezwanie pomocy</span></button>
+      </section>
+
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Lokalizacja zdarzenia</h2>
+          <div class="row">
+            <button class="ghost" id="copyLocBtn">Kopiuj</button>
+            <button class="ghost" id="gpsBtn">Pobierz GPS</button>
+          </div>
+        </div>
+        <div class="grid2">
+          <label><span>Miejsce / opis</span><input id="manualLocation" placeholder="np. Zakład A, hala 2, tor 7, km 184.500"></label>
+          <label><span>GPS</span><input id="gpsLocation" readonly placeholder="Jeszcze nie pobrano lokalizacji"></label>
+          <label><span>Punkt orientacyjny</span><input id="landmark" placeholder="przejazd, brama, most, słup"></label>
+          <label><span>Dojazd</span><input id="accessRoute" placeholder="jak dojechać do miejsca zdarzenia"></label>
+        </div>
+      </section>
+
+
+      
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Treść zgłoszenia</h2>
+          <button class="ghost" id="copyReportBtn">Kopiuj</button>
+        </div>
+        <div class="grid2">
+          <label><span>Typ zdarzenia</span>
+            <select id="eventType"></select>
+          </label>
+          <label><span>Liczba poszkodowanych</span><input id="casualties" type="number" min="1" value="1"></label>
+        </div>
+        <label><span>Opis sytuacji</span><textarea id="description" rows="2" class="autogrow" placeholder="Krótki opis stanu poszkodowanego i zdarzenia"></textarea></label>
+        <div class="row wrap-mobile report-actions">
+          <button class="solid primary" id="prepRatBtn">Przygotuj ratownika</button>
+        </div>
+        <textarea id="reportOutput" rows="8" readonly placeholder="Tutaj pojawi się gotowa treść zgłoszenia do skopiowania"></textarea>
+      </section>
+
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Powiadomienia</h2>
+          <div class="row wrap-mobile">
+            <button class="ghost" id="enableNotificationsBtn">Włącz powiadomienia</button>
+            <button class="ghost" id="testNotificationBtn">Test</button>
+            <button class="ghost" id="notificationInfoBtn" type="button">Co to jest?</button>
+          </div>
+        </div>
+        <p class="note">Lokalne notyfikacje aplikacji na tym urządzeniu. Do komunikatów dla wszystkich użytkowników służy komunikat startowy w MASTER + synchronizacja online przez Supabase.</p>
+      </section>
+
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Szybkie tematy pierwszej pomocy</h2>
+          <div class="row">
+            <button class="ghost" id="startMetronomeBtn">Metronom 110/min</button>
+            <button class="ghost" id="stopMetronomeBtn">Stop</button>
+          </div>
+        </div>
+        <div class="search-row">
+          <input id="topicSearch" class="search-input wide" placeholder="Szukaj tematów, np. zadławienia, RKO, krwotok, oparzenia">
+          <button class="ghost" id="clearTopicSearchBtn">Wyczyść</button>
+        </div>
+        <div id="topics"></div>
+      </section>
+    </section>
+
+    <section class="screen" id="screen-algorithms">
+      <section class="card" id="algorithmStepperCard">
+        <div class="card-head wrap-mobile">
+          <h2>Tryb krokowy</h2>
+          <div class="row wrap-mobile"><span id="algoCountBadge" class="badge">Algorytm 0 z 0</span><span id="algoProgressBadge" class="badge">Wybierz algorytm</span></div>
+        </div>
+        <div class="row wrap-mobile" style="margin-bottom:10px">
+          <button class="ghost" id="algoBackToListBtn">📋 Lista algorytmów</button>
+          <button class="ghost" id="algoPrevAllBtn">⏮ Poprzedni algorytm</button>
+          <button class="ghost" id="algoPrevBtn">◀ Poprzedni krok</button>
+          <button class="ghost" id="algoNextBtn">Następny krok ▶</button>
+          <button class="ghost" id="algoNextAllBtn">Następny algorytm ⏭</button>
+          <button class="ghost" id="algoResetBtn">Restart</button>
+        </div>
+        <div id="algorithmStepper" class="algorithm-stepper empty-state">Wybierz algorytm z listy poniżej.</div>
+      </section>
+
+      <section class="card" id="algorithmListCard">
+        <div class="card-head wrap-mobile">
+          <h2>Algorytmy działania</h2>
+        </div>
+        <div class="search-row">
+          <input id="algorithmSearch" class="search-input wide" placeholder="Szukaj algorytmu, np. RKO dziecko, porażenie prądem, wypadek kolejowy">
+          <button class="ghost" id="clearAlgorithmSearchBtn">Wyczyść</button>
+        </div>
+        <div id="algorithmList" class="algo-list"></div>
+      </section>
+    </section>
+
+    <section class="screen" id="screen-aed">
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>AED</h2>
+          <div class="row">
+            <button class="ghost" id="findNearestAedBtn">AED kolejowe</button>
+            <button class="ghost" id="openExternalAedMapBtn">OpenAEDMap</button>
+          </div>
+        </div>
+        <div id="map"></div>
+        <p class="note" id="aedInfo">Mapa OpenStreetMap działa online. Możesz też otworzyć zewnętrzną mapę AED opartą o OpenStreetMap.</p>
+      </section>
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h3>Punkty AED</h3>
+          <input id="aedSearch" class="search-input" placeholder="Szukaj po lokalizacji, np. zakład, hala, recepcja">
+        </div>
+        <div id="aedList"></div>
+      </section>
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h3>Apteczki</h3>
+          <div class="row wrap-mobile"><input id="kitSearch" class="search-input wide" placeholder="Szukaj apteczki po lokalizacji lub zawartości, np. zakład, hala, RKO, opatrunek"><select id="kitTypeFilter" class="search-input compact"></select><select id="kitCategoryFilter" class="search-input compact"></select></div>
+        </div>
+        <div id="kitList"></div>
+      </section>
+    </section>
+
+    <section class="screen" id="screen-team">
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Ratownicy zakładowi</h2>
+          <div class="row wrap-mobile">
+            <select id="defaultZakladSelect" class="search-input compact"></select>
+            <select id="rescuerZakladFilter" class="search-input compact"></select>
+            <input id="rescuerSearch" class="search-input compact" placeholder="Szukaj ratownika">
+          </div>
+        </div>
+        <div class="row wrap-mobile" style="margin-bottom:10px">
+          <button class="ghost" id="saveDefaultZakladBtn">Ustaw domyślny zakład</button>
+          <button class="ghost" id="clearDefaultZakladBtn">Usuń domyślny zakład</button>
+          <button class="ghost" id="selectAllRescuersBtn">Zaznacz wszystkich</button>
+          <button class="ghost" id="clearSelectedRescuersBtn">Wyczyść zaznaczenie</button>
+          <button class="solid primary" id="groupSmsBtn">Alarm SMS do wielu ratowników</button>
+          <button class="solid amber" id="groupCallBtn">Alarm SMS + telefon</button>
+        </div>
+        <div id="rescuerList"></div>
+      </section>
+    </section>
+
+    <section class="screen" id="screen-admin">
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Panel administratora online-ready</h2>
+          <div class="row">
+            <button class="ghost" id="syncBtn">Synchronizuj</button>
+            <button class="ghost danger-lite" id="resetLocalBtn">Reset lokalny</button>
+          </div>
+        </div>
+        <p class="note">Panel administratora jest zabezpieczony hasłem. Bez konfiguracji backendu działa lokalnie. Po uzupełnieniu <code>config.js</code> może synchronizować dane online przez Supabase.</p>
+        <div class="admin-password-box">
+          <h3>Zmiana hasła administratora</h3>
+          <div class="grid2">
+            <label><span>Aktualne hasło</span><input id="adminPasswordCurrent" type="password" autocomplete="current-password"></label>
+            <label><span>Nowe hasło</span><input id="adminPasswordNew" type="password" autocomplete="new-password"></label>
+          </div>
+          <div class="row">
+            <button class="ghost" id="changeAdminPasswordBtn">Zmień hasło</button>
+          </div>
+        </div>
+        <div class="grid2 grid3-admin">
+          <div>
+            <h3>Ratownicy</h3>
+            <label><span>Imię i nazwisko</span><input id="adminRescuerName"></label>
+            <label><span>Telefon</span><input id="adminRescuerPhone"></label>
+            <label><span>Zakład</span><input id="adminRescuerZone" placeholder="np. ZLK Poznań"></label>
+            <label><span>Lokalizacja / baza</span><input id="adminRescuerLocation" placeholder="np. Posterunek główny"></label>
+            <label><span>Zmiana</span><input id="adminRescuerShift" placeholder="np. Dzienna / nocna / całodobowa"></label>
+            <label><span>Uprawnienia</span><input id="adminRescuerSkills"></label>
+            <label><span>Grupa alarmowa</span><select id="adminRescuerAlarmGroup"><option value="tak">Tak</option><option value="nie">Nie</option></select></label>
+            <div class="row wrap-mobile">
+              <button class="solid primary" id="addRescuerBtn">Dodaj / zapisz ratownika</button>
+              <button class="ghost" id="importRescuersBtn">Import CSV</button>
+              <input id="importRescuersCsv" type="file" accept=".csv,text/csv" hidden>
+            </div>
+            <p class="note">CSV: id;name;phone;zone;location;shift;skills;alarmGroup</p>
+            <div id="adminRescuerTable"></div>
+          </div>
+          <div>
+            <h3>AED</h3>
+            <label><span>Nazwa</span><input id="adminAedName"></label>
+            <label><span>Lokalizacja</span><input id="adminAedLocation"></label>
+            <label><span>Szerokość geogr.</span><input id="adminAedLat" type="number" step="0.000001"></label>
+            <label><span>Długość geogr.</span><input id="adminAedLon" type="number" step="0.000001"></label>
+            <div class="row wrap-mobile">
+              <button class="solid primary" id="addAedBtn">Dodaj / zapisz AED</button>
+              <button class="ghost" id="importAedsBtn">Import CSV</button>
+              <input id="importAedsCsv" type="file" accept=".csv,text/csv" hidden>
+            </div>
+            <p class="note">CSV: id;name;location;lat;lon</p>
+            <div id="adminAedTable"></div>
+          </div>
+          <div>
+            <h3>Apteczki</h3>
+            <label><span>Nazwa</span><input id="adminKitName"></label>
+            <label><span>Opis / lokalizacja</span><input id="adminKitLocation"></label>
+            
+            <label><span>Rodzaj apteczki</span><select id="adminKitType"><option>zakładowa</option><option>samochodowa</option><option>prywatna</option><option>terenowa</option><option>inna</option></select></label>
+            <label><span>Kategorie wyposażenia</span><input id="adminKitCategories" placeholder="np. ochrona osobista, opatrunki, RKO, oparzenia, inne"></label>
+            <label><span>Zawartość + rozmiar + ilość + termin ważności</span><textarea id="adminKitContents" rows="9" placeholder="Każdy element w nowej linii w formacie: nazwa | rozmiar | ilość | RRRR-MM-DD
+np. rękawiczki nitrylowe | M | 10 | 2027-06-30
+maseczka CPR | dziecięca | 2 | 2028-01-15
+igła i-gel | 4 | 1 | 2027-12-31"></textarea></label>
+            <div class="row wrap-mobile">
+              <button class="solid primary" id="addKitBtn">Dodaj / zapisz apteczkę</button>
+              <button class="ghost" id="importKitsBtn">Import CSV</button>
+              <input id="importKitsCsv" type="file" accept=".csv,text/csv" hidden>
+              <button class="ghost" id="expiredKitReportBtn">Raport przeterminowanych</button>
+              <button class="ghost" id="expiredKitExcelBtn">Eksport Excel</button>
+            </div>
+            <p class="note">CSV apteczek: id;name;type;location;categories;contents. Kolumnę contents wpisz jako: nazwa | rozmiar | ilość | data || nazwa2 | rozmiar | ilość | data</p>
+            <textarea id="expiredKitReportOutput" rows="8" readonly placeholder="Raport przeterminowanych artykułów będzie widoczny tutaj"></textarea>
+            <div id="adminKitTable"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Typy zdarzeń do zgłoszenia</h2>
+          <span class="badge">Widoczne na ekranie Start</span>
+        </div>
+        <div class="grid2 admin-topic-layout">
+          <div>
+            <label><span>Nazwa typu zdarzenia</span><input id="adminEventTypeName" placeholder="np. Uraz głowy, podejrzenie zawału, porażenie łukiem"></label>
+            <div class="row wrap-mobile">
+              <button class="solid primary" id="saveEventTypeBtn">Dodaj typ zdarzenia</button>
+              <button class="ghost" id="cancelEventTypeEditBtn" hidden>Anuluj edycję</button>
+            </div>
+            <p class="note">Tutaj zarządzasz listą typów zdarzeń widocznych przy przygotowaniu treści zgłoszenia na ekranie Start.</p>
+          </div>
+          <div>
+            <h3>Aktualna lista</h3>
+            <div id="adminEventTypeTable"></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Tematy pierwszej pomocy</h2>
+          <button class="ghost" data-jump-screen="screen-start">Podgląd tematów</button>
+        </div>
+        <div class="grid2 admin-topic-layout">
+          <div>
+            <h3 id="topicFormTitle">Dodaj temat</h3>
+            <label><span>Tytuł</span><input id="topicTitle" placeholder="np. Zadławienia"></label>
+            <label><span>Ikona</span><input id="topicIcon" placeholder="np. 😮‍💨"></label>
+            <label><span>Obrazy (maks. 4, każdy w nowej linii)</span><textarea id="topicImage" rows="4" placeholder="np. assets/topics/sec03.jpg
+assets/topics/sec04.jpg"></textarea></label>
+            <label><span>Nagłówek wstępu</span><input id="topicLeadTitle" placeholder="np. Wstęp, Na co zwrócić uwagę, Wprowadzenie"></label>
+            <label><span>Wstęp / opis</span><textarea id="topicLead" rows="5" placeholder="Informacje wstępne / opis tematu widoczny obok grafiki"></textarea></label>
+            <div class="rich-toolbar" data-target="topicLead">
+              <button type="button" class="ghost" data-format="bold">B</button>
+              <button type="button" class="ghost" data-format="sizeUp">A+</button>
+              <button type="button" class="ghost" data-format="sizeDown">A-</button>
+              <input type="color" data-format-color value="#d92c2c">
+            </div>
+            <label><span>Kolor pola Wstęp / opis</span><input id="topicLeadColor" type="color" value="#2a6dd9"></label>
+            <label><span>Nagłówek sekcji kroków</span><textarea id="topicIntro" rows="2" placeholder="np. Postępowanie"></textarea></label>
+            <div class="rich-toolbar" data-target="topicIntro">
+              <button type="button" class="ghost" data-format="bold">B</button>
+              <button type="button" class="ghost" data-format="sizeUp">A+</button>
+              <button type="button" class="ghost" data-format="sizeDown">A-</button>
+              <input type="color" data-format-color value="#d92c2c">
+            </div>
+            <label><span>Kolor sekcji kroków</span><input id="topicStepsColor" type="color" value="#1f8f4d"></label>
+            <label><span>Kroki (każdy w nowej linii)</span><textarea id="topicSteps" rows="7" placeholder="Każdy krok wpisz w nowej linii"></textarea></label>
+            <label><span>Czerwone pole – nagłówek</span><textarea id="topicWarnTitle" rows="2" placeholder="np. Ważne"></textarea></label>
+            <div class="rich-toolbar" data-target="topicWarnTitle">
+              <button type="button" class="ghost" data-format="bold">B</button>
+              <button type="button" class="ghost" data-format="sizeUp">A+</button>
+              <button type="button" class="ghost" data-format="sizeDown">A-</button>
+              <input type="color" data-format-color value="#d92c2c">
+            </div>
+            <label><span>Kolor czerwonego pola</span><input id="topicWarnColor" type="color" value="#c63b3b"></label>
+            <label><span>Czerwone pole – treść (każda linia osobno)</span><textarea id="topicWarnSteps" rows="5" placeholder="Dodatkowe ostrzeżenia lub ważne informacje"></textarea></label>
+            <label><span>Dodatkowe notatki</span><textarea id="topicNotes" rows="5" placeholder="Dodatkowe notatki organizacyjne lub praktyczne"></textarea></label>
+            <div class="rich-toolbar" data-target="topicNotes">
+              <button type="button" class="ghost" data-format="bold">B</button>
+              <button type="button" class="ghost" data-format="sizeUp">A+</button>
+              <button type="button" class="ghost" data-format="sizeDown">A-</button>
+              <input type="color" data-format-color value="#d92c2c">
+            </div>
+            <label><span>Kolor dodatkowych notatek</span><input id="topicNotesColor" type="color" value="#0b4fa2"></label>
+            <label><span>Powiązane algorytmy działania</span><div id="topicAlgorithmLinks" class="algo-link-picker"></div></label>
+            <div class="row">
+              <button class="solid primary" id="saveTopicBtn">Dodaj temat</button>
+              <button class="ghost" id="cancelTopicEditBtn" hidden>Anuluj edycję</button>
+            </div>
+          </div>
+          <div>
+            <h3>Lista tematów</h3>
+            <div id="adminTopicTable"></div>
+          </div>
+        </div>
+      </section>
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Algorytmy ratunkowe</h2>
+          <div class="row">
+            <button class="ghost" id="printAlgorithmsBtn">Drukuj / PDF</button>
+            <button class="ghost" id="exportAlgorithmsHtmlBtn">Eksport HTML</button>
+            <button class="ghost" id="exportAlgorithmsDocBtn">Eksport Word</button>
+          </div>
+        </div>
+        <div class="grid2 admin-topic-layout">
+          <div>
+            <h3 id="algorithmFormTitle">Dodaj algorytm</h3>
+            <label><span>Tytuł</span><input id="algorithmTitle" placeholder="np. RKO dorosły"></label>
+            <label><span>Ikona</span><input id="algorithmIcon" placeholder="np. 🫀"></label>
+            <label><span>Kategoria</span><input id="algorithmCategory" placeholder="np. PKP, RKO, Urazy"></label>
+            <label><span>Styl</span>
+              <select id="algorithmAccent">
+                <option value="primary">Niebieski</option>
+                <option value="danger">Czerwony</option>
+                <option value="amber">Bursztynowy</option>
+                <option value="warning">Żółty</option>
+              </select>
+            </label>
+            <label><span>Kroki algorytmu (każdy w nowej linii)</span><textarea id="algorithmSteps" rows="10" placeholder="Każdy krok algorytmu wpisz w nowej linii"></textarea></label>
+            <div class="row">
+              <button class="solid primary" id="saveAlgorithmBtn">Dodaj algorytm</button>
+              <button class="ghost" id="cancelAlgorithmEditBtn" hidden>Anuluj edycję</button>
+            </div>
+          </div>
+          <div>
+            <h3>Lista algorytmów</h3>
+            <div id="adminAlgorithmTable"></div>
+          </div>
+        </div>
+      </section>
+
+    </section>
+  </main>
+
+  <nav class="bottom-nav five-tabs">
+    <button data-screen="screen-start" class="active"><span class="nav-ico">🏠</span><span>Start</span></button>
+    <button data-screen="screen-algorithms"><span class="nav-ico">🧭</span><span>Algorytmy działania</span></button>
+    <button data-screen="screen-aed"><span class="nav-ico">⚡</span><span>AED i Apteczki</span></button>
+    <button data-screen="screen-team"><span class="nav-ico">🧑‍⚕️</span><span>Ratownicy</span></button>
+    <button data-screen="screen-admin"><span class="nav-ico">🛠️</span><span>Panel</span></button>
+  </nav>
+
+
+
+  <div id="masterModal" class="master-modal" hidden>
+    <section class="master-panel">
+      <div class="row wrap-mobile master-actions">
+        <div>
+          <h2>Ukryty panel master</h2>
+          <div class="master-secret-note">Wejście: 5 kliknięć w logo aplikacji.</div>
+        </div>
+        <button class="ghost" id="masterCloseBtn">Zamknij</button>
+      </div>
+      <div class="grid2">
+        <section class="card">
+          <div class="card-head wrap-mobile">
+            <h3>Hasło administratora</h3>
+            <button class="ghost" id="masterCopyAdminPasswordBtn">Kopiuj aktualne</button>
+          </div>
+          <label><span>Aktualne hasło administratora</span><input id="masterAdminPasswordValue" class="readonly-box" readonly></label>
+          <label><span>Ustaw nowe hasło administratora</span><input id="masterAdminPasswordNew" type="password" autocomplete="new-password" placeholder="min. 6 znaków"></label>
+          <div class="row">
+            <button class="solid primary" id="masterResetAdminPasswordBtn">Zresetuj hasło administratora</button>
+          </div>
+        </section>
+        <section class="card">
+          <div class="card-head wrap-mobile">
+            <h3>Hasło panelu master</h3>
+            <button class="ghost" id="masterRevealBtn">Odśwież panel</button>
+          </div>
+          <label><span>Aktualne hasło master</span><input id="masterPasswordCurrent" type="password" autocomplete="current-password"></label>
+          <label><span>Nowe hasło master</span><input id="masterPasswordNew" type="password" autocomplete="new-password" placeholder="Domyślnie: Lisu87"></label>
+          <div class="row">
+            <button class="solid amber" id="changeMasterPasswordBtn">Zmień hasło master</button>
+          </div>
+        </section>
+        <section class="card">
+          <div class="card-head wrap-mobile">
+            <h3>PIN potwierdzenia master</h3>
+            <span class="badge">Wymagany przy usuwaniu historii</span>
+          </div>
+          <label><span>Aktualny PIN (ukryty)</span><input id="masterPinMaskedValue" class="readonly-box" readonly></label>
+          <div class="grid2">
+            <label><span>Aktualny PIN</span><input id="masterPinCurrent" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="np. 8716"></label>
+            <label><span>Nowy PIN</span><input id="masterPinNew" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="4-8 cyfr"></label>
+          </div>
+          <div class="row">
+            <button class="solid primary" id="changeMasterPinBtn">Zmień PIN master</button>
+          </div>
+        </section>
+      </div>
+
+      <div class="grid2">
+        <section class="card">
+          <div class="card-head wrap-mobile"><h3>Informacje o aplikacji</h3></div>
+          <label><span>Tytuł okna</span><input id="masterAppInfoTitle" placeholder="np. O aplikacji Ratownik PLK"></label>
+          <label><span>Opis aplikacji</span><textarea id="masterAppInfoText" rows="8" placeholder="Cel aplikacji, funkcjonalności i sposób użycia"></textarea></label>
+          <div class="row"><button class="solid primary" id="saveAppInfoBtn">Zapisz informacje o aplikacji</button></div>
+        </section>
+        <section class="card">
+          <div class="card-head wrap-mobile"><h3>Komunikat dla użytkowników</h3><span class="badge">Widoczny na ekranie startowym</span></div>
+          <label><span>Tytuł komunikatu</span><input id="masterNoticeTitle" placeholder="np. Aktualizacja danych"></label>
+          <label><span>Treść komunikatu</span><textarea id="masterNoticeText" rows="6" placeholder="np. Dodano nowych ratowników. Odśwież aplikację lub pobierz dane online."></textarea></label>
+          <div class="row wrap-mobile">
+            <button class="solid amber" id="saveAppNoticeBtn">Zapisz komunikat</button>
+            <button class="ghost" id="clearAppNoticeBtn">Usuń komunikat</button>
+          </div>
+        </section>
+      </div>
+      <section class="card master-history-card">
+        <div class="card-head wrap-mobile">
+          <h3>Historia zmian lokalnych</h3>
+          <div class="row wrap-mobile">
+            <span id="historyCountBadge" class="badge">Wpisy: 0</span>
+            <button class="ghost" id="refreshPublicIpBtn">Odśwież IP</button>
+            <button class="ghost" id="exportHistoryCsvBtn">Eksport CSV</button>
+            <button class="ghost" id="exportHistoryExcelBtn">Eksport Excel</button>
+            <button class="ghost danger-lite" id="clearHistoryBtn">Usuń historię</button>
+          </div>
+        </div>
+        <p class="note">Historia zapisuje kto, co i kiedy zmienił w danych lokalnych ratowników, AED, apteczek i algorytmów. IP pobierane jest jako publiczny adres zewnętrzny, jeśli urządzenie ma dostęp do internetu.</p>
+        <div class="grid2 master-context-grid">
+          <label><span>Bieżący operator administrator</span><input id="currentAdminOperatorValue" class="readonly-box" readonly></label>
+          <label><span>Bieżący operator master</span><input id="currentMasterOperatorValue" class="readonly-box" readonly></label>
+          <label><span>Ostatni zapisany publiczny IP</span><input id="currentPublicIpValue" class="readonly-box" readonly></label>
+          <label><span>Filtr obszaru</span>
+            <select id="changeHistoryFilter">
+              <option value="">Wszystkie obszary</option>
+              <option value="rescuer">Ratownicy</option>
+              <option value="aed">AED</option>
+              <option value="kit">Apteczki</option>
+              <option value="algorithm">Algorytmy</option>
+              <option value="password">Hasła</option>
+              <option value="system">System</option>
+            </select>
+          </label>
+        </div>
+        <label><span>Szukaj w historii</span><input id="changeHistorySearch" placeholder="np. Jan Kowalski, hala, AED, reset hasła"></label>
+        <div id="changeHistoryList" class="history-list"></div>
+      </section>
+      <section class="card master-history-card">
+        <div class="card-head wrap-mobile">
+          <h3>Historia alarmów</h3>
+          <div class="row wrap-mobile">
+            <span id="alarmHistoryCountBadge" class="badge">Alarmy: 0</span>
+            <button class="ghost" id="exportAlarmExcelBtn">Eksport alarmów do Excela</button>
+          </div>
+        </div>
+        <p class="note">Osobna historia alarmów zapisuje alarmy zakładowe, alarmy grupowe, telefony do domyślnego ratownika i treść raportu.</p>
+        <div class="grid2 master-context-grid">
+          <label><span>Filtr zakładu</span><select id="alarmHistoryZoneFilter"><option value="">Wszystkie zakłady</option></select></label>
+          <label><span>Szukaj w alarmach</span><input id="alarmHistorySearch" placeholder="np. ZLK Poznań, Jan Kowalski, alarm"></label>
+        </div>
+        <div id="alarmHistoryList" class="history-list"></div>
+      </section>
+
+    </section>
+  </div>
+
+  <div id="offlineModal" class="master-modal" hidden>
+    <section class="master-panel">
+      <div class="row wrap-mobile master-actions">
+        <div><h2>Ekran offline</h2><div class="master-secret-note">Najważniejsze numery i algorytmy dostępne także bez internetu.</div></div>
+        <button class="ghost" id="closeOfflineBtn">Zamknij</button>
+      </div>
+      <div id="offlineSummaryModal"></div>
+    </section>
+  </div>
+
+
+  <div id="appInfoModal" class="master-modal" hidden>
+    <section class="master-panel">
+      <div class="row wrap-mobile master-actions">
+        <div><h2 id="appInfoModalTitle">O aplikacji</h2><div class="master-secret-note">Najważniejsze informacje o celu i działaniu aplikacji.</div></div>
+        <button class="ghost" id="closeAppInfoBtn">Zamknij</button>
+      </div>
+      <section class="card">
+        <div id="appInfoModalBody" class="app-info-body"></div>
+      </section>
+    </section>
+  </div>
+
+  <div id="notificationInfoModal" class="master-modal" hidden>
+    <section class="master-panel">
+      <div class="row wrap-mobile master-actions">
+        <div><h2>Powiadomienia — co to jest?</h2><div class="master-secret-note">Wyjaśnienie działania lokalnych powiadomień w aplikacji PWA.</div></div>
+        <button class="ghost" id="closeNotificationInfoBtn">Zamknij</button>
+      </div>
+      <section class="card">
+        <div id="notificationInfoBody" class="app-info-body"></div>
+      </section>
+    </section>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

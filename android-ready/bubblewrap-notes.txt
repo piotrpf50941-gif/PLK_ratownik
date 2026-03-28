@@ -1,0 +1,5 @@
+Bubblewrap quick start:
+1. npm install -g @bubblewrap/cli
+2. bubblewrap init --manifest=https://YOUR-DOMAIN/manifest.webmanifest
+3. bubblewrap build
+Output for Play Store should be AAB.
