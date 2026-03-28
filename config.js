@@ -1,7 +1,7 @@
 window.APP_CONFIG = {
   // Wklej dane z Supabase > Settings > API
-  supabaseUrl: 'WSTAW_TUTAJ_SUPABASE_URL',
-  supabaseAnonKey: 'WSTAW_TUTAJ_SUPABASE_ANON_KEY',
+  supabaseUrl: 'https://eaactwnirvnhbzsindor.supabase.co',
+  supabaseAnonKey: 'sb_publishable_MxnHvYzpo8c8g-0MHYc5-g_PGkpStn2',
 
   // Opóźnienie automatycznego zapisu zmian administratora do bazy
   autoSyncDelayMs: 900,
