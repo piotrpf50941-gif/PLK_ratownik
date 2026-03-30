@@ -21,7 +21,8 @@ const STORAGE_KEYS = {
   appInfo: 'pp_v11_app_info',
   appNotice: 'pp_v11_app_notice',
   eventTypes: 'pp_v11_event_types',
-  appNoticeSeen: 'pp_v11_app_notice_seen'
+  appNoticeSeen: 'pp_v11_app_notice_seen',
+  remoteTablePresence: 'pp_v11_remote_table_presence'
 };
 const defaultRescuers = [
   { id:'r1', name:'Jan Kowalski', phone:'600100200', zone:'ZLK Poznań', location:'Posterunek główny', shift:'Dzienna', skills:'KPP, AED', active:true, alarmGroup:true },
@@ -379,6 +380,18 @@ function getOnlinePayloadForTable(table){
     .filter(row => row && String(row?.[keyField] || '').trim())
     .map(row => JSON.parse(JSON.stringify(row)));
 }
+function getRemoteTablePresenceMap(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEYS.remoteTablePresence);
+    const parsed = raw ? JSON.parse(raw) : null;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  }catch(_){
+    return {};
+  }
+}
+function saveRemoteTablePresenceMap(map){
+  localStorage.setItem(STORAGE_KEYS.remoteTablePresence, JSON.stringify(map || {}));
+}
 function getCollectionByTable(table){
   if(table === 'rescuers') return rescuers;
   if(table === 'aeds') return aeds;
@@ -426,8 +439,11 @@ async function syncAllOnline(options={}){
   for (const table of ONLINE_TABLES){
     await upsertTableOnline(table);
   }
+  const remotePresence = getRemoteTablePresenceMap();
+  ONLINE_TABLES.forEach(table => { remotePresence[table] = true; });
+  saveRemoteTablePresenceMap(remotePresence);
   if(!options.skipReload){
-    await loadOnlineData({ silent:true });
+    await loadOnlineData({ silent:true, allowEmptyTables:true });
   }
 }
 function scheduleOnlineSync(){
@@ -453,10 +469,20 @@ async function loadOnlineData(options={}){
       if(error) throw error;
       result[table] = data || [];
     }
+    const remotePresence = getRemoteTablePresenceMap();
     const hasRemoteData = ONLINE_TABLES.some(table => (result[table] || []).length > 0);
-    if(!hasRemoteData) return false;
+    const canApplyEmptyTables = options.allowEmptyTables === true || ONLINE_TABLES.some(table => remotePresence[table]);
+    if(!hasRemoteData && !canApplyEmptyTables) return false;
     isApplyingRemoteState = true;
-    ONLINE_TABLES.forEach(table => assignCollectionByTable(table, result[table] || []));
+    ONLINE_TABLES.forEach(table => {
+      const remoteRows = result[table] || [];
+      const localRows = getCollectionByTable(table) || [];
+      const hasRows = remoteRows.length > 0;
+      if(hasRows) remotePresence[table] = true;
+      const shouldApply = hasRows || options.allowEmptyTables === true || remotePresence[table] || !localRows.length;
+      if(shouldApply) assignCollectionByTable(table, remoteRows);
+    });
+    saveRemoteTablePresenceMap(remotePresence);
     sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
