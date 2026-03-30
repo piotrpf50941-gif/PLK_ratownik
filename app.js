@@ -622,6 +622,190 @@ function normalizeKit(kit, idx=0){
   const items = rawItems.map(normalizeKitItem).filter(x => x.name);
   return { id: kit?.id || `k${Date.now()}_${idx}`, name: kit?.name || 'Apteczka', type: kit?.type || 'zakładowa', location: kit?.location || '', categories: Array.isArray(kit?.categories) ? kit.categories : [], items: items.length ? items : [{name:'brak opisu zawartości', size:'', qty:'', expiry:''}] };
 }
+function detectCsvDelimiter(text){
+  const sample = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] || '';
+  const semicolons = (sample.match(/;/g) || []).length;
+  const commas = (sample.match(/,/g) || []).length;
+  return semicolons >= commas ? ';' : ',';
+}
+function parseCsvMatrix(text, forcedDelimiter=''){
+  const source = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const delimiter = forcedDelimiter || detectCsvDelimiter(source);
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let inQuotes = false;
+  for(let i = 0; i < source.length; i++){
+    const ch = source[i];
+    if(inQuotes){
+      if(ch === '"'){
+        if(source[i + 1] === '"'){
+          cell += '"';
+          i++;
+        }else{
+          inQuotes = false;
+        }
+      }else{
+        cell += ch;
+      }
+      continue;
+    }
+    if(ch === '"'){
+      inQuotes = true;
+      continue;
+    }
+    if(ch === delimiter){
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+    if(ch === '\n'){
+      row.push(cell);
+      if(row.some(value => String(value || '').trim() !== '')) rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+    cell += ch;
+  }
+  row.push(cell);
+  if(row.some(value => String(value || '').trim() !== '')) rows.push(row);
+  if(!rows.length) return { header: [], dataRows: [], delimiter };
+  const header = rows[0].map(value => String(value || '').trim());
+  const dataRows = rows.slice(1).filter(values => values.some(value => String(value || '').trim() !== ''));
+  return { header, dataRows, delimiter };
+}
+function csvRowsToObjects(header, dataRows){
+  const keys = (header || []).map(value => String(value || '').trim().toLowerCase());
+  return (dataRows || []).map(values => {
+    const row = {};
+    keys.forEach((key, idx) => {
+      if(key) row[key] = String(values[idx] ?? '').trim();
+    });
+    return row;
+  });
+}
+function parseCsvBool(value, fallback=true){
+  const txt = String(value ?? '').trim().toLowerCase();
+  if(!txt) return fallback;
+  if(['nie','false','0','no'].includes(txt)) return false;
+  if(['tak','true','1','yes'].includes(txt)) return true;
+  return fallback;
+}
+function parseCsvCategories(value){
+  const txt = String(value ?? '').trim();
+  if(!txt) return [];
+  if((txt.startsWith('[') && txt.endsWith(']')) || (txt.startsWith('"[') && txt.endsWith(']"'))){
+    try{
+      const normalized = txt.startsWith('"[') ? txt.slice(1, -1).replace(/""/g, '"') : txt;
+      const parsed = JSON.parse(normalized);
+      if(Array.isArray(parsed)) return parsed.map(item => String(item || '').trim()).filter(Boolean);
+    }catch(_){ }
+  }
+  return txt.split(',').map(item => item.trim()).filter(Boolean);
+}
+function normalizeKitContentsText(value){
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/(\d{4}-\d{2})\s*-\s*\n\s*(\d{2})/g, '$1-$2')
+    .trim();
+}
+function parseKitContentsField(value){
+  const txt = normalizeKitContentsText(value);
+  if(!txt) return [];
+  if((txt.startsWith('[') && txt.endsWith(']')) || (txt.startsWith('"[') && txt.endsWith(']"'))){
+    try{
+      const normalized = txt.startsWith('"[') ? txt.slice(1, -1).replace(/""/g, '"') : txt;
+      const parsed = JSON.parse(normalized);
+      if(Array.isArray(parsed)) return parsed.map(normalizeKitItem).filter(item => item.name);
+    }catch(_){ }
+  }
+  const chunks = txt.includes('||')
+    ? txt.split(/\s*\|\|\s*/)
+    : txt.split(/\n+/);
+  return chunks
+    .map(chunk => chunk.trim())
+    .filter(Boolean)
+    .map(normalizeKitItem)
+    .filter(item => item.name);
+}
+function getImportTargetInfo(type){
+  if(type === 'rescuers') return { list: rescuers, entityType: 'rescuer', label: 'ratowników' };
+  if(type === 'aeds') return { list: aeds, entityType: 'aed', label: 'AED' };
+  if(type === 'kits') return { list: kits, entityType: 'kit', label: 'apteczek' };
+  throw new Error('Nieobsługiwany typ importu.');
+}
+function mapCsvRowToEntity(type, row, idx){
+  if(type === 'rescuers'){
+    const item = normalizeRescuer({
+      id: row.id || `r${Date.now()}_${idx}`,
+      name: row.name || row.imie || row['imię'] || '',
+      phone: row.phone || row.telefon || '',
+      zone: row.zone || row.zaklad || row['zakład'] || '',
+      location: row.location || row.lokalizacja || '',
+      shift: row.shift || row.zmiana || '',
+      skills: row.skills || row.uprawnienia || '',
+      alarmGroup: parseCsvBool(row.alarmgroup, true),
+      active: parseCsvBool(row.active, true)
+    }, idx);
+    if(!item.name || !item.phone) throw new Error(`Wiersz ${idx + 2}: ratownik wymaga pól name i phone.`);
+    return item;
+  }
+  if(type === 'aeds'){
+    const lat = Number(String(row.lat || '').replace(',', '.'));
+    const lon = Number(String(row.lon || '').replace(',', '.'));
+    if(!row.name || !row.location) throw new Error(`Wiersz ${idx + 2}: AED wymaga pól name i location.`);
+    if(Number.isNaN(lat) || Number.isNaN(lon)) throw new Error(`Wiersz ${idx + 2}: AED wymaga poprawnych pól lat i lon.`);
+    return {
+      id: row.id || `a${Date.now()}_${idx}`,
+      name: String(row.name || '').trim(),
+      location: String(row.location || '').trim(),
+      lat,
+      lon
+    };
+  }
+  if(type === 'kits'){
+    const items = parseKitContentsField(row.contents || row.items || '');
+    const item = normalizeKit({
+      id: row.id || `k${Date.now()}_${idx}`,
+      name: row.name || '',
+      type: row.type || 'zakładowa',
+      location: row.location || '',
+      categories: parseCsvCategories(row.categories || ''),
+      items
+    }, idx);
+    if(!item.name || !item.location) throw new Error(`Wiersz ${idx + 2}: apteczka wymaga pól name i location.`);
+    return item;
+  }
+  throw new Error('Nieobsługiwany typ importu.');
+}
+async function handleCsvImport(file, type){
+  if(!file) return;
+  try{
+    const text = await file.text();
+    const { header, dataRows } = parseCsvMatrix(text);
+    if(!header.length || !dataRows.length) throw new Error('Plik CSV jest pusty albo nie zawiera danych.');
+    const rows = csvRowsToObjects(header, dataRows);
+    const target = getImportTargetInfo(type);
+    const items = rows.map((row, idx) => mapCsvRowToEntity(type, row, idx));
+    items.forEach(item => upsertEntity(target.list, item));
+    saveLocal();
+    renderAll();
+    if(type === 'aeds') renderMap();
+    logChangeSync(makeHistoryPayload({
+      actorRole:'Administrator',
+      action:'Import CSV',
+      entityType: target.entityType,
+      label: file.name,
+      afterState: `zaimportowano ${items.length} ${target.label}`,
+      details: `Zaimportowano plik CSV: ${file.name}.`
+    }));
+    alert(`Zaimportowano ${items.length} ${target.label} z pliku ${file.name}.`);
+  }catch(err){
+    alert('Błąd importu CSV: ' + (err?.message || err));
+  }
+}
 function isExpired(dateText){
   if(!/^\d{4}-\d{2}-\d{2}$/.test(String(dateText||''))) return false;
   const today = new Date();
