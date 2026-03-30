@@ -332,10 +332,13 @@ assets/topics/sec04.jpg"></textarea></label>
             </div>
             <label><span>Kolor dodatkowych notatek</span><input id="topicNotesColor" type="color" value="#0b4fa2"></label>
             <label><span>Powiązane algorytmy działania</span><div id="topicAlgorithmLinks" class="algo-link-picker"></div></label>
-            <div class="row">
+            <div class="row wrap-mobile">
               <button class="solid primary" id="saveTopicBtn">Dodaj temat</button>
+              <button class="ghost" id="importTopicsBtn">Import CSV</button>
+              <input id="importTopicsCsv" type="file" accept=".csv,text/csv" hidden>
               <button class="ghost" id="cancelTopicEditBtn" hidden>Anuluj edycję</button>
             </div>
+            <p class="note">CSV tematów: id;n;icon;title;img;lead;sections. Pole sections wpisz np.: ok :: Rozpoznanie miejsca zdarzenia :: Krok 1 | Krok 2 || warn :: Ważne :: Ostrzeżenie 1</p>
           </div>
           <div>
             <h3>Lista tematów</h3>

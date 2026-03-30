@@ -730,6 +730,51 @@ function parseKitContentsField(value){
     .map(normalizeKitItem)
     .filter(item => item.name);
 }
+function normalizeTopicSectionsText(value){
+  return String(value ?? '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .trim();
+}
+function parseTopicImagesField(value){
+  const txt = String(value ?? '').trim();
+  if(!txt) return [];
+  if((txt.startsWith('[') && txt.endsWith(']')) || (txt.startsWith('"[') && txt.endsWith(']"'))){
+    try{
+      const normalized = txt.startsWith('"[') ? txt.slice(1, -1).replace(/""/g, '"') : txt;
+      const parsed = JSON.parse(normalized);
+      if(Array.isArray(parsed)) return parsed.map(item => String(item || '').trim()).filter(Boolean).slice(0,4);
+    }catch(_){ }
+  }
+  return txt.split(/\r?\n|,/).map(item => item.trim()).filter(Boolean).slice(0,4);
+}
+function parseTopicSectionsField(value){
+  const txt = normalizeTopicSectionsText(value);
+  if(!txt) return [];
+  if((txt.startsWith('[') && txt.endsWith(']')) || (txt.startsWith('"[') && txt.endsWith(']"'))){
+    try{
+      const normalized = txt.startsWith('"[') ? txt.slice(1, -1).replace(/""/g, '"') : txt;
+      const parsed = JSON.parse(normalized);
+      if(Array.isArray(parsed)) return parsed.map((section, idx) => normalizeSection(section, idx === 0 ? 'ok' : 'warn'));
+    }catch(_){ }
+  }
+  const chunks = txt.includes('||')
+    ? txt.split(/\s*\|\|\s*/)
+    : txt.split(/\n+/);
+  return chunks
+    .map(chunk => chunk.trim())
+    .filter(Boolean)
+    .map((chunk, idx) => {
+      if(!chunk.includes('::')) return normalizeSection(chunk, idx === 0 ? 'ok' : 'warn');
+      const parts = chunk.split(/\s*::\s*/).map(part => part.trim());
+      const type = parts[0] || (idx === 0 ? 'ok' : 'warn');
+      const title = parts[1] || (type === 'warn' ? 'Ważne' : 'Postępowanie');
+      const itemsRaw = parts.slice(2).join(' :: ');
+      const items = itemsRaw.split('|').map(part => part.trim()).filter(Boolean);
+      return normalizeSection([type, title, items], idx === 0 ? 'ok' : 'warn');
+    })
+    .filter(Boolean);
+}
 function getImportTargetInfo(type){
   if(type === 'rescuers') return { list: rescuers, entityType: 'rescuer', label: 'ratowników' };
   if(type === 'aeds') return { list: aeds, entityType: 'aed', label: 'AED' };
@@ -780,6 +825,77 @@ function mapCsvRowToEntity(type, row, idx){
   }
   throw new Error('Nieobsługiwany typ importu.');
 }
+function getImportTargetInfo(type){
+  if(type === 'rescuers') return { list: rescuers, entityType: 'rescuer', label: 'ratownikow' };
+  if(type === 'aeds') return { list: aeds, entityType: 'aed', label: 'AED' };
+  if(type === 'kits') return { list: kits, entityType: 'kit', label: 'apteczek' };
+  if(type === 'topics') return { list: topics, entityType: 'topic', label: 'tematow' };
+  throw new Error('Nieobslugiwany typ importu.');
+}
+function mapCsvRowToEntity(type, row, idx){
+  if(type === 'rescuers'){
+    const item = normalizeRescuer({
+      id: row.id || `r${Date.now()}_${idx}`,
+      name: row.name || row.imie || row['imię'] || '',
+      phone: row.phone || row.telefon || '',
+      zone: row.zone || row.zaklad || row['zakład'] || '',
+      location: row.location || row.lokalizacja || '',
+      shift: row.shift || row.zmiana || '',
+      skills: row.skills || row.uprawnienia || '',
+      alarmGroup: parseCsvBool(row.alarmgroup, true),
+      active: parseCsvBool(row.active, true)
+    }, idx);
+    if(!item.name || !item.phone) throw new Error(`Wiersz ${idx + 2}: ratownik wymaga pol name i phone.`);
+    return item;
+  }
+  if(type === 'aeds'){
+    const lat = Number(String(row.lat || '').replace(',', '.'));
+    const lon = Number(String(row.lon || '').replace(',', '.'));
+    if(!row.name || !row.location) throw new Error(`Wiersz ${idx + 2}: AED wymaga pol name i location.`);
+    if(Number.isNaN(lat) || Number.isNaN(lon)) throw new Error(`Wiersz ${idx + 2}: AED wymaga poprawnych pol lat i lon.`);
+    return {
+      id: row.id || `a${Date.now()}_${idx}`,
+      name: String(row.name || '').trim(),
+      location: String(row.location || '').trim(),
+      lat,
+      lon
+    };
+  }
+  if(type === 'kits'){
+    const items = parseKitContentsField(row.contents || row.items || '');
+    const item = normalizeKit({
+      id: row.id || `k${Date.now()}_${idx}`,
+      name: row.name || '',
+      type: row.type || 'zakładowa',
+      location: row.location || '',
+      categories: parseCsvCategories(row.categories || ''),
+      items
+    }, idx);
+    if(!item.name || !item.location) throw new Error(`Wiersz ${idx + 2}: apteczka wymaga pol name i location.`);
+    return item;
+  }
+  if(type === 'topics'){
+    const item = normalizeTopic({
+      id: row.id || `t${Date.now()}_${idx}`,
+      n: Number(row.n) || idx + 1,
+      icon: row.icon || '🩺',
+      title: row.title || row.t || '',
+      img: row.img || row.image || '',
+      images: parseTopicImagesField(row.images || row.img || row.image || ''),
+      lead: row.lead || row.intro || row.description || '',
+      leadTitle: row.leadtitle || row.lead_title || 'Wstęp',
+      leadColor: row.leadcolor || row.lead_color || defaultTopicColors.lead,
+      stepsColor: row.stepscolor || row.steps_color || defaultTopicColors.steps,
+      warnColor: row.warncolor || row.warn_color || defaultTopicColors.warn,
+      notesColor: row.notescolor || row.notes_color || defaultTopicColors.notes,
+      relatedAlgorithmIds: parseCsvCategories(row.relatedalgorithmids || row.related_algorithms || row.algorithms || ''),
+      sections: parseTopicSectionsField(row.sections || row.s || '')
+    }, idx);
+    if(!item.t) throw new Error(`Wiersz ${idx + 2}: temat wymaga pola title.`);
+    return item;
+  }
+  throw new Error('Nieobslugiwany typ importu.');
+}
 async function handleCsvImport(file, type){
   if(!file) return;
   try{
@@ -790,6 +906,11 @@ async function handleCsvImport(file, type){
     const target = getImportTargetInfo(type);
     const items = rows.map((row, idx) => mapCsvRowToEntity(type, row, idx));
     items.forEach(item => upsertEntity(target.list, item));
+    if(type === 'topics'){
+      topics = topics
+        .map((topic, topicIdx) => normalizeTopic(topic, topicIdx))
+        .sort((a, b) => (Number(a.n) || 9999) - (Number(b.n) || 9999) || String(a.t || '').localeCompare(String(b.t || ''), 'pl'));
+    }
     saveLocal();
     renderAll();
     if(type === 'aeds') renderMap();
@@ -2272,9 +2393,11 @@ $('addKitBtn').onclick = () => {
 if ($('importRescuersBtn')) $('importRescuersBtn').onclick = () => $('importRescuersCsv')?.click();
 if ($('importAedsBtn')) $('importAedsBtn').onclick = () => $('importAedsCsv')?.click();
 if ($('importKitsBtn')) $('importKitsBtn').onclick = () => $('importKitsCsv')?.click();
+if ($('importTopicsBtn')) $('importTopicsBtn').onclick = () => $('importTopicsCsv')?.click();
 if ($('importRescuersCsv')) $('importRescuersCsv').onchange = e => { handleCsvImport(e.target.files?.[0], 'rescuers'); e.target.value = ''; };
 if ($('importAedsCsv')) $('importAedsCsv').onchange = e => { handleCsvImport(e.target.files?.[0], 'aeds'); e.target.value = ''; };
 if ($('importKitsCsv')) $('importKitsCsv').onchange = e => { handleCsvImport(e.target.files?.[0], 'kits'); e.target.value = ''; };
+if ($('importTopicsCsv')) $('importTopicsCsv').onchange = e => { handleCsvImport(e.target.files?.[0], 'topics'); e.target.value = ''; };
 
 if ($('saveEventTypeBtn')) $('saveEventTypeBtn').onclick = () => {
   const value = $('adminEventTypeName')?.value.trim() || '';
