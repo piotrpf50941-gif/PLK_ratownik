@@ -2,6 +2,7 @@ RATOWNIK PLK — szybka konfiguracja online sync
 
 1. Załóż projekt w Supabase.
 2. W SQL Editor uruchom plik SUPABASE_SETUP.sql.
+   Jeśli baza już istnieje ze starszej wersji aplikacji, uruchom ten plik ponownie, aby dodać brakujące kolumny.
 3. W Authentication > Users utwórz użytkownika administratora online.
 4. Otwórz config.js i wstaw:
    - supabaseUrl

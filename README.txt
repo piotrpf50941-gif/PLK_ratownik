@@ -18,9 +18,9 @@ PANEL ADMINISTRATORA ONLINE
 Aplikacja działa od razu lokalnie.
 Jeśli chcesz panel online:
 1. Załóż projekt Supabase.
-2. Utwórz tabele:
-   - rescuers(id text primary key, name text, phone text, zone text, skills text)
-   - aeds(id text primary key, name text, location text, lat float8, lon float8)
+2. W SQL Editor uruchom cały plik `SUPABASE_SETUP.sql`.
+   Ten plik tworzy komplet tabel, polityk i realtime zgodnych z obecną wersją aplikacji.
+   Jeśli projekt Supabase już istnieje, uruchom go ponownie po aktualizacji aplikacji, aby dodać brakujące kolumny.
 3. W pliku config.js wpisz:
    supabaseUrl
    supabaseAnonKey
@@ -52,8 +52,14 @@ WERSJA 10 – DODATKOWE ZMIANY
 - w zakładce AED dodany przycisk otwierający zewnętrzną mapę OpenAEDMap opartą o OpenStreetMap.
 
 PANEL ONLINE – SUPABASE
-Dla wersji online utwórz także tabelę:
-- kits(id text primary key, name text, location text, contents jsonb)
+Nie twórz tabel ręcznie według starych opisów.
+Zawsze używaj pliku `SUPABASE_SETUP.sql`, bo zawiera pełny aktualny schemat dla:
+- rescuers
+- aeds
+- kits
+- topics
+- algorithms
+- app_settings
 
 UWAGA O MAPACH AED
 W aplikacji zostawiłem własną mapę OSM z lokalnymi punktami oraz dodałem przycisk otwierający OpenAEDMap, bo to publiczna mapa AED oparta o dane OpenStreetMap. Informacje o OpenAEDMap jako globalnej mapie AED oraz o polskiej inicjatywie AED w OSM pochodzą ze źródeł OpenStreetMap. citeturn719634search3turn719634search4turn719634search9

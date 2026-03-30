@@ -289,6 +289,96 @@ function applyFormatToField(fieldId, mode, extra=''){
 function hasOnlineConfig(){
   return !!supabaseClient;
 }
+function getOnlinePrimaryKey(table){
+  return table === 'app_settings' ? 'key' : 'id';
+}
+function formatOnlineError(error){
+  const base = String(error?.message || error?.details || error?.hint || error || 'Nieznany błąd online').trim();
+  if(/column .* does not exist/i.test(base) || /Could not find the ['"`].+['"`] column/i.test(base) || /schema cache/i.test(base)){
+    return `${base}. Zaktualizuj schemat Supabase, uruchamiając najnowszy plik SUPABASE_SETUP.sql w SQL Editor.`;
+  }
+  return base;
+}
+function serializeRowForOnline(table, row, idx=0){
+  if(table === 'rescuers'){
+    const item = normalizeRescuer(row, idx);
+    return {
+      id: item.id,
+      name: item.name,
+      phone: item.phone,
+      zone: item.zone,
+      location: item.location,
+      shift: item.shift,
+      skills: item.skills,
+      active: item.active,
+      alarmGroup: item.alarmGroup
+    };
+  }
+  if(table === 'aeds'){
+    return {
+      id: String(row?.id || `a${Date.now()}_${idx}`),
+      name: String(row?.name || '').trim(),
+      location: String(row?.location || '').trim(),
+      lat: Number.isFinite(Number(row?.lat)) ? Number(row.lat) : null,
+      lon: Number.isFinite(Number(row?.lon)) ? Number(row.lon) : null
+    };
+  }
+  if(table === 'kits'){
+    const item = normalizeKit(row, idx);
+    return {
+      id: item.id,
+      name: item.name,
+      type: item.type,
+      location: item.location,
+      categories: Array.isArray(item.categories) ? item.categories : [],
+      items: Array.isArray(item.items) ? item.items.map(normalizeKitItem).filter(x => x.name) : []
+    };
+  }
+  if(table === 'topics'){
+    const item = normalizeTopic(row, idx);
+    return {
+      id: item.id,
+      n: item.n,
+      icon: item.icon,
+      t: item.t,
+      img: item.img,
+      images: Array.isArray(item.images) ? item.images.slice(0,4) : [],
+      lead: item.lead,
+      leadTitle: item.leadTitle,
+      leadColor: item.leadColor,
+      stepsColor: item.stepsColor,
+      warnColor: item.warnColor,
+      notesColor: item.notesColor,
+      s: Array.isArray(item.s) ? item.s : [],
+      relatedAlgorithmIds: Array.isArray(item.relatedAlgorithmIds) ? item.relatedAlgorithmIds : []
+    };
+  }
+  if(table === 'algorithms'){
+    const item = normalizeAlgorithm(row, idx);
+    return {
+      id: item.id,
+      icon: item.icon,
+      title: item.title,
+      category: item.category,
+      accent: item.accent,
+      steps: Array.isArray(item.steps) ? item.steps : []
+    };
+  }
+  if(table === 'app_settings'){
+    return {
+      key: String(row?.key || '').trim(),
+      value: row?.value ?? {}
+    };
+  }
+  return row;
+}
+function getOnlinePayloadForTable(table){
+  const keyField = getOnlinePrimaryKey(table);
+  return (getCollectionByTable(table) || [])
+    .map((row, idx) => serializeRowForOnline(table, row, idx))
+    .filter(row => row && String(row?.[keyField] || '').trim())
+    .map(row => JSON.parse(JSON.stringify(row)));
+}
 function getCollectionByTable(table){
   if(table === 'rescuers') return rescuers;
   if(table === 'aeds') return aeds;
@@ -313,9 +403,20 @@ function scheduleOnlineRefresh(){
 }
 async function upsertTableOnline(table){
   if(!hasOnlineConfig()) return;
-  const payload = JSON.parse(JSON.stringify(getCollectionByTable(table) || []));
-  const { error } = await supabaseClient.from(table).upsert(payload, { onConflict: table === 'app_settings' ? 'key' : 'id' });
-  if(error) throw error;
+  const keyField = getOnlinePrimaryKey(table);
+  const payload = getOnlinePayloadForTable(table);
+  const { data: remoteRows, error: remoteError } = await supabaseClient.from(table).select(keyField);
+  if(remoteError) throw new Error(formatOnlineError(remoteError));
+  const localKeys = new Set(payload.map(row => String(row?.[keyField] || '').trim()).filter(Boolean));
+  const remoteKeys = (remoteRows || []).map(row => String(row?.[keyField] || '').trim()).filter(Boolean);
+  const keysToDelete = remoteKeys.filter(key => !localKeys.has(key));
+  if(keysToDelete.length){
+    const { error: deleteError } = await supabaseClient.from(table).delete().in(keyField, keysToDelete);
+    if(deleteError) throw new Error(formatOnlineError(deleteError));
+  }
+  if(!payload.length) return;
+  const { error } = await supabaseClient.from(table).upsert(payload, { onConflict: keyField });
+  if(error) throw new Error(formatOnlineError(error));
 }
 async function syncAllOnline(options={}){
   if(!hasOnlineConfig()) throw new Error('Brak konfiguracji online. Uzupełnij config.js.');
@@ -365,7 +466,8 @@ normalizeAppInfo();
     if(!options.silent) updateOnlineStatus('Pobrano aktualne dane online.', 'ok');
     return true;
   }catch(err){
-    if(!options.silent) updateOnlineStatus(`Nie udało się pobrać danych online: ${err.message}`, 'warn');
+    const message = formatOnlineError(err);
+    if(!options.silent) updateOnlineStatus(`Nie udało się pobrać danych online: ${message}`, 'warn');
     return false;
   }finally{
     isApplyingRemoteState = false;

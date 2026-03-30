@@ -28,6 +28,9 @@ W paczce są już gotowe:
 3. Wklej całość do SQL Editor.
 4. Uruchom cały skrypt.
 
+Jeśli projekt Supabase był utworzony wcześniej dla starszej wersji aplikacji, uruchom ten sam plik ponownie.
+Skrypt zawiera także polecenia `alter table ... add column if not exists`, więc uzupełni brakujące kolumny bez niszczenia danych.
+
 Efekt:
 - powstaną tabele `rescuers`, `aeds`, `kits`, `topics`, `algorithms`,
 - odczyt będzie dostępny dla wszystkich użytkowników aplikacji,

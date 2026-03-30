@@ -1,6 +1,6 @@
-const CACHE = 'ratownik-plk-20260325-notif-fix-v5';
+const CACHE = 'ratownik-plk-20260330-sync-fix-v6';
 const ASSETS = [
-  './','./index.html','./style.css','./app.js','./config.js','./manifest.webmanifest','./assets/logo_plk.jpg','./assets/icon.png','./assets/audio/metronome_rko.wav',
+  './','./index.html','./style.css','./app.js','./config.js','./manifest.webmanifest','./assets/logo_plk.jpg','./assets/logo_plk.png','./assets/icon.png','./assets/audio/metronome_rko.wav',
   './assets/topics/sec01.jpg','./assets/topics/sec02.jpg','./assets/topics/sec03.jpg','./assets/topics/sec04.jpg','./assets/topics/sec05.jpg',
   './assets/topics/sec06.jpg','./assets/topics/sec07.jpg','./assets/topics/sec08.jpg','./assets/topics/sec09.jpg','./assets/topics/sec10.jpg','./assets/topics/sec11.jpg'
 ];
