@@ -21,6 +21,7 @@ body.night-mode{
 .screen.active{display:grid}
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:16px;box-shadow:var(--shadow)}
 .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
+.card-head-actions{align-items:center;justify-content:flex-end}
 .wrap-mobile{flex-wrap:wrap}
 .card-head h2,h3{margin:0}
 .hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -106,6 +107,14 @@ body.night-mode .algo-card.active{background:#17283d}
 .admin-actions{justify-content:flex-end}
 .topic-admin-row strong{display:block;margin-bottom:4px}
 .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#fff3da;color:#8a6208;font-size:.82rem;font-weight:800}
+.topic-category-priority-card{margin-bottom:12px;padding:12px;border:1px solid var(--line);border-radius:18px;background:var(--surface)}
+.topic-priority-head{margin-bottom:8px}
+.topic-priority-head h4{margin:0}
+.topic-category-priority-table{display:grid;gap:10px}
+.topic-category-priority-row{align-items:center}
+.topic-category-priority-meta{display:grid;gap:3px}
+.topic-category-priority-meta small{color:var(--muted)}
+.topic-category-priority-row .admin-actions button{min-width:48px}
 #map{height:380px;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
 .note{margin:10px 0 0;color:var(--muted)}
 .empty-state{border:1px dashed var(--line);border-radius:16px;padding:18px;background:var(--surface);color:var(--muted)}

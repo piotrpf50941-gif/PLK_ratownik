@@ -21,6 +21,7 @@ const STORAGE_KEYS = {
   appInfo: 'pp_v11_app_info',
   appNotice: 'pp_v11_app_notice',
   eventTypes: 'pp_v11_event_types',
+  topicCategoryPriority: 'pp_v11_topic_category_priority',
   appNoticeSeen: 'pp_v11_app_notice_seen',
   remoteTablePresence: 'pp_v11_remote_table_presence',
   notificationInbox: 'pp_v11_notification_inbox'
@@ -183,6 +184,7 @@ let offlineAlgorithmIds = JSON.parse(localStorage.getItem(STORAGE_KEYS.offlineAl
 let appInfo = JSON.parse(localStorage.getItem(STORAGE_KEYS.appInfo) || 'null') || deepClone(DEFAULT_APP_INFO);
 let appNotice = JSON.parse(localStorage.getItem(STORAGE_KEYS.appNotice) || 'null') || { title:'', text:'' };
 let eventTypes = JSON.parse(localStorage.getItem(STORAGE_KEYS.eventTypes) || 'null') || deepClone(DEFAULT_EVENT_TYPES);
+let topicCategoryPriority = JSON.parse(localStorage.getItem(STORAGE_KEYS.topicCategoryPriority) || 'null');
 let notificationInbox = JSON.parse(localStorage.getItem(STORAGE_KEYS.notificationInbox) || '[]');
 let eventTypeEditIndex = null;
 let currentTopicEditId = null;
@@ -294,11 +296,13 @@ function formatNotificationTime(value){
 }
 
 function buildAppSettingsRows(){
+  normalizeTopicCategoryPriorityState();
   return [
     { key:'offlineAlgorithmIds', value: deepClone(offlineAlgorithmIds || []) },
     { key:'appInfo', value: deepClone(appInfo || DEFAULT_APP_INFO) },
     { key:'appNotice', value: deepClone(appNotice || { title:'', text:'', updatedAt:'', notify:false }) },
     { key:'eventTypes', value: deepClone(eventTypes || DEFAULT_EVENT_TYPES) },
+    { key:'topicCategoryPriority', value: deepClone(topicCategoryPriority || []) },
     { key:'defaultRescuerByZone', value: deepClone(getDefaultRescuerMap()) }
   ];
 }
@@ -309,9 +313,11 @@ function applyAppSettingsRows(rows){
   if(map.appInfo && typeof map.appInfo === 'object') appInfo = map.appInfo;
   if(map.appNotice && typeof map.appNotice === 'object') appNotice = map.appNotice;
   if(Array.isArray(map.eventTypes)) eventTypes = map.eventTypes;
+  if(Array.isArray(map.topicCategoryPriority)) topicCategoryPriority = map.topicCategoryPriority;
   if(map.defaultRescuerByZone && typeof map.defaultRescuerByZone === 'object') saveDefaultRescuerMap(map.defaultRescuerByZone);
   normalizeOfflineAlgorithmIds();
   normalizeAppInfo();
+  normalizeTopicCategoryPriorityState();
 }
 
 function sanitizeRichText(value){
@@ -1439,7 +1445,7 @@ function summarizeTopic(item){
   const topic = normalizeTopic(item || {});
   return `${topic.icon || '🩺'} ${topic.t || 'Temat'} • kategoria: ${topic.category} • sekcji: ${(topic.s || []).length} • obrazów: ${(topic.images || []).length}`;
 }
-const TOPIC_CATEGORY_PRIORITY = ['Pierwsza pomoc','Kolej','Aplikacja'];
+const DEFAULT_TOPIC_CATEGORY_PRIORITY = ['Pierwsza pomoc','Kolej','Aplikacja'];
 const defaultTopicColors = { lead:'#2a6dd9', steps:'#1f8f4d', warn:'#c63b3b', notes:'#0b4fa2' };
 function inferDefaultTopicCategory(topic){
   const id = String(topic?.id || '').trim().toLowerCase();
@@ -1452,10 +1458,30 @@ function normalizeTopicCategory(value, topic){
   const txt = String(value ?? '').trim();
   return txt || inferDefaultTopicCategory(topic);
 }
-function getTopicCategoryPriority(category){
+function normalizeTopicCategoryPriorityList(list, items=topics){
+  const result = [];
+  const seen = new Set();
+  const add = value => {
+    const label = String(value || '').trim();
+    const key = label.toLowerCase();
+    if(!label || seen.has(key)) return;
+    seen.add(key);
+    result.push(label);
+  };
+  add('Pierwsza pomoc');
+  (Array.isArray(list) ? list : []).forEach(add);
+  DEFAULT_TOPIC_CATEGORY_PRIORITY.forEach(add);
+  (Array.isArray(items) ? items : []).forEach(topic => add(normalizeTopicCategory(topic?.category, topic)));
+  return result;
+}
+function normalizeTopicCategoryPriorityState(items=topics){
+  topicCategoryPriority = normalizeTopicCategoryPriorityList(topicCategoryPriority, items);
+}
+function getTopicCategoryPriority(category, items=topics){
   const normalized = normalizeTopicCategory(category).toLowerCase();
-  const idx = TOPIC_CATEGORY_PRIORITY.findIndex(item => item.toLowerCase() === normalized);
-  return idx === -1 ? TOPIC_CATEGORY_PRIORITY.length : idx;
+  const priority = normalizeTopicCategoryPriorityList(topicCategoryPriority, items);
+  const idx = priority.findIndex(item => item.toLowerCase() === normalized);
+  return idx === -1 ? priority.length : idx;
 }
 function groupTopicsByCategory(items){
   const map = new Map();
@@ -1467,7 +1493,7 @@ function groupTopicsByCategory(items){
   });
   return [...map.entries()]
     .sort((a, b) => {
-      const order = getTopicCategoryPriority(a[0]) - getTopicCategoryPriority(b[0]);
+      const order = getTopicCategoryPriority(a[0], items) - getTopicCategoryPriority(b[0], items);
       if(order) return order;
       const aFirst = Number(a[1]?.[0]?.n) || 9999;
       const bFirst = Number(b[1]?.[0]?.n) || 9999;
@@ -1636,6 +1662,20 @@ function algorithmExportHtml(){
     </section>`).join('');
   return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>Algorytmy ratunkowe PKP PLK</title></head><body style="font-family:Arial,sans-serif;padding:24px;max-width:900px;margin:auto;"><h1>PKP PLK Ratownik – Algorytmy ratunkowe</h1>${blocks}</body></html>`;
 }
+function openPrintWindow(html){
+  const w = window.open('', '_blank');
+  if(!w){
+    alert('Przeglądarka zablokowała okno wydruku. Zezwól na wyskakujące okna i spróbuj ponownie.');
+    return;
+  }
+  w.document.write(html);
+  w.document.close();
+  w.focus();
+  setTimeout(() => w.print(), 400);
+}
+function printAlgorithms(){
+  openPrintWindow(algorithmExportHtml());
+}
 function sanitizeState(){
   rescuers = (rescuers || []).map((r, idx) => normalizeRescuer(r, idx));
   kits = (kits || []).map((k, idx) => normalizeKit(k, idx));
@@ -1649,6 +1689,7 @@ function saveLocal(){
   sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
+  normalizeTopicCategoryPriorityState();
   renumberTopics();
   localStorage.setItem(STORAGE_KEYS.rescuers, JSON.stringify(rescuers));
   localStorage.setItem(STORAGE_KEYS.aeds, JSON.stringify(aeds));
@@ -1659,6 +1700,7 @@ normalizeAppInfo();
   localStorage.setItem(STORAGE_KEYS.appInfo, JSON.stringify(appInfo));
   localStorage.setItem(STORAGE_KEYS.appNotice, JSON.stringify(appNotice));
   localStorage.setItem(STORAGE_KEYS.eventTypes, JSON.stringify(eventTypes));
+  localStorage.setItem(STORAGE_KEYS.topicCategoryPriority, JSON.stringify(topicCategoryPriority));
   if(!isApplyingRemoteState) scheduleOnlineSync();
 }
 function uniqueValues(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pl')); }
@@ -2091,6 +2133,35 @@ function renderKits(query=''){
     </div>`).join('') || '<div class="empty-state">Brak apteczek.</div>';
   if($('expiredKitReportOutput')) $('expiredKitReportOutput').value = buildExpiredKitReport();
 }
+function renderTopicCategoryPriorityEditor(){
+  const box = $('topicCategoryPriorityTable');
+  if(!box) return;
+  normalizeTopicCategoryPriorityState();
+  const categories = normalizeTopicCategoryPriorityList(topicCategoryPriority, topics);
+  const counts = new Map();
+  topics.map((topic, idx) => normalizeTopic(topic, idx)).forEach(topic => {
+    counts.set(topic.category, (counts.get(topic.category) || 0) + 1);
+  });
+  box.innerHTML = categories.map((category, idx) => {
+    const count = counts.get(category) || 0;
+    const topicLabel = count === 1 ? 'temat' : 'tematów';
+    const isPinned = idx === 0 && String(category).toLowerCase() === 'pierwsza pomoc';
+    const disableUp = isPinned || idx <= 1;
+    const disableDown = isPinned || idx === categories.length - 1;
+    return `
+      <div class="admin-row topic-category-priority-row">
+        <div class="topic-category-priority-meta">
+          <strong>${idx + 1}. ${esc(category)}</strong>
+          <small>${count} ${topicLabel}${isPinned ? ' • kategoria priorytetowa' : ''}</small>
+        </div>
+        <div class="row admin-actions">
+          <button class="ghost" type="button" data-move-topic-category="up" data-topic-category-name="${esc(category)}" ${disableUp ? 'disabled' : ''}>↑</button>
+          <button class="ghost" type="button" data-move-topic-category="down" data-topic-category-name="${esc(category)}" ${disableDown ? 'disabled' : ''}>↓</button>
+        </div>
+      </div>
+    `;
+  }).join('') || '<div class="empty-state">Najpierw dodaj tematy, aby ustawić kolejność kategorii.</div>';
+}
 function renderAdminTopics(){
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(topics);
   $('adminTopicTable').innerHTML = topics.map((topic, idx) => {
@@ -2141,6 +2212,7 @@ function renderAll(){
   sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
+  normalizeTopicCategoryPriorityState();
   sanitizeNotificationInbox();
   sanitizeHistoryState();
   renderTopics($('topicSearch')?.value || '');
@@ -2149,6 +2221,7 @@ normalizeAppInfo();
   renderRescuers();
   renderAeds(null, $('aedSearch')?.value || '');
   renderKits($('kitSearch')?.value || '');
+  renderTopicCategoryPriorityEditor();
   renderAdminTopics();
   renderAdminAlgorithms();
   renderAdminEventTypes();
@@ -2767,7 +2840,14 @@ $('exportAlgorithmsDocBtn').onclick = () => {
   exportBlob('pkp_plk_algorytmy_ratunkowe.doc', content, 'application/msword');
 };
 $('exportAlgorithmsHtmlBtn').onclick = () => exportBlob('pkp_plk_algorytmy_ratunkowe.html', algorithmExportHtml(), 'text/html');
-$('printAlgorithmsBtn').onclick = () => { const w = window.open('', '_blank'); if(!w) return; w.document.write(algorithmExportHtml()); w.document.close(); w.focus(); setTimeout(() => w.print(), 400); };
+if($('printAlgorithmsBtn')) $('printAlgorithmsBtn').onclick = () => printAlgorithms();
+if($('printAlgorithmsPublicBtn')) $('printAlgorithmsPublicBtn').onclick = () => printAlgorithms();
+if($('printAlgorithmsStepperBtn')) $('printAlgorithmsStepperBtn').onclick = () => printAlgorithms();
+if($('resetTopicCategoryPriorityBtn')) $('resetTopicCategoryPriorityBtn').onclick = () => {
+  topicCategoryPriority = [...DEFAULT_TOPIC_CATEGORY_PRIORITY];
+  saveLocal();
+  renderAll();
+};
 $('resetLocalBtn').onclick = () => {
   if(!confirm('Przywrócić domyślne dane lokalne?')) return;
   localStorage.removeItem(STORAGE_KEYS.rescuers);
@@ -2775,11 +2855,13 @@ $('resetLocalBtn').onclick = () => {
   localStorage.removeItem(STORAGE_KEYS.kits);
   localStorage.removeItem(STORAGE_KEYS.topics);
   localStorage.removeItem(STORAGE_KEYS.algorithms);
+  localStorage.removeItem(STORAGE_KEYS.topicCategoryPriority);
   rescuers = deepClone(defaultRescuers);
   aeds = deepClone(defaultAeds);
   kits = deepClone(defaultKits);
   topics = deepClone(defaultTopics);
   algorithms = deepClone(defaultAlgorithms);
+  topicCategoryPriority = [...DEFAULT_TOPIC_CATEGORY_PRIORITY];
   currentAlgorithmId = algorithms[0]?.id || null;
   currentAlgorithmStep = 0;
   saveLocal(); renderAll(); renderMap(); resetEntityForms();
@@ -2787,12 +2869,14 @@ $('resetLocalBtn').onclick = () => {
   alert('Przywrócono dane domyślne.');
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type]') || e.target;
+  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-move-topic-category],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type]') || e.target;
   const rescuerId = t.dataset.editRescuer || t.dataset.deleteRescuer;
   const aedId = t.dataset.editAed || t.dataset.deleteAed;
   const kitId = t.dataset.editKit || t.dataset.deleteKit;
   const topicId = t.dataset.editTopic || t.dataset.deleteTopic;
   const moveTopic = t.dataset.moveTopic;
+  const moveTopicCategory = t.dataset.moveTopicCategory;
+  const topicCategoryName = t.dataset.topicCategoryName || '';
   const algoId = t.dataset.selectAlgo;
   const adminAlgorithmId = t.dataset.editAlgorithm || t.dataset.deleteAlgorithm;
   const relatedAlgoId = t.dataset.openRelatedAlgo;
@@ -2887,6 +2971,18 @@ document.addEventListener('click', e => {
     if (newIdx < 0 || newIdx >= topics.length) return;
     [topics[idx], topics[newIdx]] = [topics[newIdx], topics[idx]];
     saveLocal(); renderAll();
+  }
+  if (moveTopicCategory){
+    normalizeTopicCategoryPriorityState();
+    const currentOrder = [...topicCategoryPriority];
+    const idx = currentOrder.findIndex(item => item.toLowerCase() === topicCategoryName.toLowerCase());
+    if (idx < 0 || idx === 0) return;
+    const newIdx = moveTopicCategory === 'up' ? idx - 1 : idx + 1;
+    if (newIdx <= 0 || newIdx >= currentOrder.length) return;
+    [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
+    topicCategoryPriority = normalizeTopicCategoryPriorityList(currentOrder, topics);
+    saveLocal();
+    renderAll();
   }
 });
 $('syncBtn').onclick = async () => {

@@ -113,7 +113,11 @@
       <section class="card" id="algorithmStepperCard">
         <div class="card-head wrap-mobile">
           <h2>Tryb krokowy</h2>
-          <div class="row wrap-mobile"><span id="algoCountBadge" class="badge">Algorytm 0 z 0</span><span id="algoProgressBadge" class="badge">Wybierz algorytm</span></div>
+          <div class="row wrap-mobile card-head-actions">
+            <button class="ghost" id="printAlgorithmsStepperBtn">Drukuj / PDF</button>
+            <span id="algoCountBadge" class="badge">Algorytm 0 z 0</span>
+            <span id="algoProgressBadge" class="badge">Wybierz algorytm</span>
+          </div>
         </div>
         <div class="row wrap-mobile" style="margin-bottom:10px">
           <button class="ghost" id="algoBackToListBtn">📋 Lista algorytmów</button>
@@ -129,6 +133,9 @@
       <section class="card" id="algorithmListCard">
         <div class="card-head wrap-mobile">
           <h2>Algorytmy działania</h2>
+          <div class="row wrap-mobile card-head-actions">
+            <button class="ghost" id="printAlgorithmsPublicBtn">Drukuj / PDF</button>
+          </div>
         </div>
         <div class="search-row">
           <input id="algorithmSearch" class="search-input wide" placeholder="Szukaj algorytmu, np. RKO dziecko, porażenie prądem, wypadek kolejowy">
@@ -344,6 +351,14 @@ assets/topics/sec04.jpg"></textarea></label>
           </div>
           <div>
             <h3>Lista tematów</h3>
+            <div class="topic-category-priority-card">
+              <div class="card-head wrap-mobile topic-priority-head">
+                <h4>Kolejność kategorii</h4>
+                <button class="ghost" id="resetTopicCategoryPriorityBtn" type="button">Reset</button>
+              </div>
+              <p class="note"><code>Pierwsza pomoc</code> jest przypięta na początku. Pozostałe kategorie możesz ustawić zgodnie z własną hierarchią ważności.</p>
+              <div id="topicCategoryPriorityTable" class="topic-category-priority-table"></div>
+            </div>
             <div id="adminTopicTable"></div>
           </div>
         </div>
