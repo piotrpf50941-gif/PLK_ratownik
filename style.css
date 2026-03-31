@@ -23,9 +23,10 @@ body.night-mode{
 .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .wrap-mobile{flex-wrap:wrap}
 .card-head h2,h3{margin:0}
-.hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.hero{border:none;border-radius:22px;padding:20px 16px;font-weight:900;font-size:1.05rem;color:#fff;min-height:110px;cursor:pointer;box-shadow:var(--shadow);display:flex;flex-direction:column;justify-content:center;gap:8px;text-align:left}
-.hero-icon{font-size:1.7rem}
+.hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.hero{border:none;border-radius:18px;padding:16px 18px;font-weight:900;font-size:1rem;color:#fff;min-height:86px;cursor:pointer;box-shadow:var(--shadow);display:flex;flex-direction:row;align-items:center;justify-content:flex-start;gap:12px;text-align:left}
+.hero > span:last-child{display:block;line-height:1.15}
+.hero-icon{font-size:1.4rem;line-height:1;flex:0 0 auto}
 .hero.danger{background:linear-gradient(135deg,var(--red),#a51f1f)}
 .hero.amber{background:linear-gradient(135deg,var(--amber),var(--amber2))}
 .hero.primary{background:linear-gradient(135deg,var(--blue),var(--blue2))}
@@ -130,7 +131,7 @@ code{background:#eef4ff;padding:2px 6px;border-radius:8px}
   .topbar{padding:12px;align-items:flex-start;flex-direction:column}
   .logo-img{width:150px;max-width:42vw}
   .topbar p{display:none}
-  .hero{min-height:96px;font-size:1rem}
+  .hero{min-height:82px;font-size:.96rem;padding:14px 16px}
   .app{padding:0 10px}
   .topic img{height:180px}
   .card{padding:14px}
@@ -231,16 +232,16 @@ body.night-mode .stepper-all-steps h3{color:var(--text);}
 @media (max-width:720px){.history-head{flex-direction:column;align-items:flex-start}.history-list{max-height:none}.history-before-after{grid-template-columns:1fr}}
 
 
-.big-panic{min-height:104px}
+.big-panic{min-height:88px}
 .hero.blue{background:#0b4fa2;color:#fff}
 .hero.ghost{background:#eef4ff;color:#0b4fa2}
-.hero-small{min-height:76px;font-size:1.35rem;padding:14px 16px}
+.hero-small{min-height:76px;font-size:1.35rem;padding:14px 16px;justify-content:center;text-align:center}
 .offline-grid{display:grid;grid-template-columns:1fr 1.4fr;gap:14px}
 .offline-card{border:1px solid var(--line);border-radius:18px;padding:14px;background:var(--surface)}
 .panic-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:10px 0}
 .is-default-rescuer{box-shadow:0 0 0 2px rgba(11,79,162,.16)}
-@media (max-width:900px){.offline-grid{grid-template-columns:1fr}.big-panic{min-height:96px}}
-@media (max-width:640px){.hero-grid{grid-template-columns:1fr}.hero{min-height:104px;font-size:1.02rem;font-weight:800}.panic-grid{grid-template-columns:1fr}.hero-small{min-height:72px}}
+@media (max-width:900px){.offline-grid{grid-template-columns:1fr}.big-panic{min-height:84px}}
+@media (max-width:640px){.hero-grid{grid-template-columns:1fr}.hero{min-height:78px;font-size:.98rem;font-weight:800;padding:14px 16px}.panic-grid{grid-template-columns:1fr}.hero-small{min-height:72px;justify-content:center;text-align:center}}
 
 
 .topbar-actions .tech-btn{background:#eef4ff;color:var(--blue)}
@@ -254,6 +255,15 @@ body.night-mode .stepper-all-steps h3{color:var(--text);}
 
 .notice-banner{margin:0 0 14px;padding:12px 14px;border-radius:14px;background:linear-gradient(135deg,rgba(217,44,44,.18),rgba(11,79,162,.14));border:1px solid rgba(255,255,255,.12);color:#fff;box-shadow:0 10px 30px rgba(0,0,0,.18)}
 .notice-banner strong{display:block;margin-bottom:4px;font-size:1rem}
+.notification-inbox{display:grid;gap:10px;margin-top:12px}
+.notification-card{border:1px solid var(--line);border-radius:16px;padding:12px 14px;background:var(--surface)}
+.notification-card.info{border-left:4px solid #2a6dd9}
+.notification-card.notice{border-left:4px solid #c98b0f}
+.notification-card.alarm{border-left:4px solid #d92c2c}
+.notification-card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:6px}
+.notification-card-head span{color:var(--muted);font-size:.88rem;white-space:nowrap}
+.notification-card-body{line-height:1.55}
+.notification-card small{display:block;margin-top:8px;color:var(--muted)}
 .app-info-body{line-height:1.65;font-size:1rem;color:var(--text)}
 .app-info-body p{margin:0 0 12px}
 .app-info-body ul{margin:0 0 12px 20px}

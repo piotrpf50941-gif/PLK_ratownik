@@ -22,7 +22,8 @@ const STORAGE_KEYS = {
   appNotice: 'pp_v11_app_notice',
   eventTypes: 'pp_v11_event_types',
   appNoticeSeen: 'pp_v11_app_notice_seen',
-  remoteTablePresence: 'pp_v11_remote_table_presence'
+  remoteTablePresence: 'pp_v11_remote_table_presence',
+  notificationInbox: 'pp_v11_notification_inbox'
 };
 const defaultRescuers = [
   { id:'r1', name:'Jan Kowalski', phone:'600100200', zone:'ZLK Poznań', location:'Posterunek główny', shift:'Dzienna', skills:'KPP, AED', active:true, alarmGroup:true },
@@ -159,7 +160,7 @@ const DEFAULT_APP_INFO = {
   title: 'O aplikacji Ratownik PLK',
   text: 'Ratownik PLK to aplikacja pomocnicza do szybkiego działania na miejscu zdarzenia.\n\nSłuży do: szybkiego wezwania pomocy, korzystania z tematów pierwszej pomocy, uruchamiania algorytmów krok po kroku, wyszukiwania AED i apteczek, przygotowania zgłoszenia oraz kontaktu z ratownikami zakładowymi.\n\nTryb offline zapewnia dostęp do najważniejszych numerów i wybranych algorytmów bez internetu. Panel administratora służy do zarządzania lokalnymi danymi, a po konfiguracji Supabase również do współdzielonej synchronizacji online pomiędzy urządzeniami.\n\nUkryty panel master umożliwia edycję informacji o aplikacji i komunikatu startowego.'
 };
-const DEFAULT_NOTIFICATION_INFO_HTML = `<p><strong>Lokalne powiadomienia</strong> to notyfikacje wyświetlane przez tę aplikację na konkretnym telefonie lub komputerze.</p><ul><li>działają tylko na urządzeniu, które wyraziło zgodę,</li><li>wymagają działania aplikacji przez HTTPS lub jako zainstalowane PWA,</li><li>służą do testu, przypomnienia albo lokalnego potwierdzenia zmian.</li></ul><p><strong>Jak dodać komunikat dla wszystkich użytkowników?</strong></p><ol><li>wejdź do panelu <strong>MASTER</strong>,</li><li>w sekcji komunikatu dla użytkowników wpisz tytuł i treść,</li><li>zapisz komunikat i wykonaj synchronizację online,</li><li>na wszystkich urządzeniach pojawi się banner startowy, a po wyrażeniu zgody również jednorazowe lokalne powiadomienie o nowym komunikacie.</li></ol><p>To nie jest pełny push z serwera. Do wspólnej komunikacji aplikacja używa <strong>komunikatu startowego + synchronizacji online przez Supabase</strong>.</p>`;
+const DEFAULT_NOTIFICATION_INFO_HTML = `<p><strong>Lokalne powiadomienia</strong> to notyfikacje wyświetlane przez tę aplikację na konkretnym telefonie lub komputerze.</p><ul><li>działają tylko na urządzeniu, które wyraziło zgodę,</li><li>wymagają działania aplikacji przez HTTPS lub jako zainstalowane PWA,</li><li>służą do testu, przypomnienia albo lokalnego potwierdzenia zmian,</li><li>ich ostatnia treść jest też widoczna w sekcji <strong>Powiadomienia</strong> wewnątrz aplikacji.</li></ul><p><strong>Jak dodać komunikat dla wszystkich użytkowników?</strong></p><ol><li>wejdź do panelu <strong>MASTER</strong>,</li><li>w sekcji komunikatu dla użytkowników wpisz tytuł i treść,</li><li>zapisz komunikat i wykonaj synchronizację online,</li><li>na wszystkich urządzeniach pojawi się banner startowy, a po wyrażeniu zgody również jednorazowe lokalne powiadomienie o nowym komunikacie.</li></ol><p>To nie jest pełny push z serwera. Do wspólnej komunikacji aplikacja używa <strong>komunikatu startowego + synchronizacji online przez Supabase</strong>.</p>`;
 const DEFAULT_EVENT_TYPES = [
   'Brak przytomności',
   'Brak oddechu / RKO',
@@ -182,6 +183,7 @@ let offlineAlgorithmIds = JSON.parse(localStorage.getItem(STORAGE_KEYS.offlineAl
 let appInfo = JSON.parse(localStorage.getItem(STORAGE_KEYS.appInfo) || 'null') || deepClone(DEFAULT_APP_INFO);
 let appNotice = JSON.parse(localStorage.getItem(STORAGE_KEYS.appNotice) || 'null') || { title:'', text:'' };
 let eventTypes = JSON.parse(localStorage.getItem(STORAGE_KEYS.eventTypes) || 'null') || deepClone(DEFAULT_EVENT_TYPES);
+let notificationInbox = JSON.parse(localStorage.getItem(STORAGE_KEYS.notificationInbox) || '[]');
 let eventTypeEditIndex = null;
 let currentTopicEditId = null;
 let currentAlgorithmId = algorithms[0]?.id || null;
@@ -190,6 +192,7 @@ let rescuerEditId = null, aedEditId = null, kitEditId = null, algorithmEditId = 
 sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
+sanitizeNotificationInbox();
 const rawCfg = window.APP_CONFIG || {};
 const cfg = { ...rawCfg,
   supabaseUrl: String(rawCfg.supabaseUrl || '').trim(),
@@ -233,6 +236,61 @@ function normalizeAppInfo(){
   eventTypes = eventTypes.map(x => String(x || '').trim()).filter(Boolean);
   eventTypes = [...new Set(eventTypes)];
   if(!eventTypes.length) eventTypes = deepClone(DEFAULT_EVENT_TYPES);
+}
+function normalizeNotificationEntry(item, idx=0){
+  return {
+    id: String(item?.id || `notice_${Date.now()}_${idx}`).trim(),
+    title: String(item?.title || 'Powiadomienie').trim() || 'Powiadomienie',
+    body: String(item?.body ?? item?.text ?? '').trim(),
+    source: String(item?.source || 'Aplikacja').trim() || 'Aplikacja',
+    level: ['info','notice','alarm'].includes(String(item?.level || '')) ? String(item.level) : 'info',
+    createdAt: String(item?.createdAt || new Date().toISOString()).trim() || new Date().toISOString()
+  };
+}
+function sanitizeNotificationInbox(){
+  if(!Array.isArray(notificationInbox)) notificationInbox = [];
+  notificationInbox = notificationInbox
+    .map((item, idx) => normalizeNotificationEntry(item, idx))
+    .filter(item => item.title || item.body)
+    .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
+    .slice(0, 25);
+}
+function saveNotificationInbox(){
+  sanitizeNotificationInbox();
+  localStorage.setItem(STORAGE_KEYS.notificationInbox, JSON.stringify(notificationInbox));
+}
+function pushInAppNotification(payload={}){
+  sanitizeNotificationInbox();
+  const entry = normalizeNotificationEntry(payload, notificationInbox.length);
+  const duplicateIdx = notificationInbox.findIndex(item =>
+    item.title === entry.title &&
+    item.body === entry.body &&
+    item.source === entry.source
+  );
+  if(duplicateIdx >= 0){
+    notificationInbox.splice(duplicateIdx, 1);
+  }
+  notificationInbox.unshift(entry);
+  notificationInbox = notificationInbox.slice(0, 25);
+  saveNotificationInbox();
+  renderNotificationInbox();
+  return entry;
+}
+function clearInAppNotifications(){
+  notificationInbox = [];
+  localStorage.removeItem(STORAGE_KEYS.notificationInbox);
+  renderNotificationInbox();
+}
+function formatNotificationTime(value){
+  const date = new Date(value);
+  if(Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('pl-PL', {
+    year:'numeric',
+    month:'2-digit',
+    day:'2-digit',
+    hour:'2-digit',
+    minute:'2-digit'
+  });
 }
 
 function buildAppSettingsRows(){
@@ -1036,7 +1094,7 @@ function alarmSelectedRescuers(){
 Liczba osób: ${selected.length}`)) return;
   const message = buildAlarmMessageForRescuers(selected);
   const numbers = openSmsToRecipients(selected, message);
-  notifyLocal('Alarm grupowy', `Przygotowano alarm dla ${selected.length} ratowników.`).catch(()=>{});
+  notifyLocal('Alarm grupowy', `Przygotowano alarm dla ${selected.length} ratowników.`, { source:'Alarmy', level:'alarm' }).catch(()=>{});
   logChangeSync(makeHistoryPayload({
     actorRole:'Administrator',
     action:'Alarm SMS + telefon',
@@ -1098,7 +1156,7 @@ function alarmZone(){
   const defaultTarget = getDefaultRescuerForZone(zone) || recipients[0];
   const message = buildAlarmMessageForRescuers(recipients);
   const numbers = openSmsToRecipients(recipients, message);
-  notifyLocal('Alarm zakładu', `Przygotowano alarm dla ${recipients.length} ratowników z ${zone}.`);
+  notifyLocal('Alarm zakładu', `Przygotowano alarm dla ${recipients.length} ratowników z ${zone}.`, { source:'Alarmy', level:'alarm' });
   logChangeSync(makeHistoryPayload({ actorRole:'Administrator', action:'Alarm zakładu', entityType:'system', label:zone, beforeState:'brak aktywnego alarmu', afterState:`SMS do: ${numbers}`, details:`Uruchomiono alarm dla zakładu ${zone}. Następnie proponowane jest połączenie do domyślnego ratownika.` }));
   logAlarmSync({ actorRole:'Administrator', action:'Alarm zakładu: SMS + telefon', zone, targets: recipients.map(r => ({name:r.name, phone:r.phone})), defaultTarget: defaultTarget ? `${defaultTarget.name} (${defaultTarget.phone})` : '', details:`SMS do grupy alarmowej (${recipients.length} osób) i propozycja telefonu do domyślnego ratownika.`, report: message });
   setTimeout(() => {
@@ -1418,6 +1476,15 @@ function groupTopicsByCategory(items){
     })
     .map(([category, topics]) => ({ category, topics }));
 }
+function buildTopicCategoryIndexMap(items){
+  const map = new Map();
+  groupTopicsByCategory(items).forEach(group => {
+    group.topics.forEach((topic, idx) => {
+      map.set(topic.id, idx + 1);
+    });
+  });
+  return map;
+}
 function hexToRgb(hex){
   const clean = String(hex || '').replace('#','').trim();
   if(!/^[0-9a-fA-F]{6}$/.test(clean)) return {r:42,g:109,b:217};
@@ -1663,7 +1730,16 @@ async function ensureNotificationRegistration(){
     return null;
   }
 }
-async function notifyLocal(title, body){
+async function notifyLocal(title, body, options={}){
+  if(!options.skipInApp){
+    pushInAppNotification({
+      title,
+      body,
+      source: options.source || 'Powiadomienie lokalne',
+      level: options.level || 'info',
+      createdAt: options.createdAt || new Date().toISOString()
+    });
+  }
   if(!canUseNotifications()) return { ok:false, reason:'insecure_or_unsupported' };
   const state = await ensureNotificationPermission(false);
   if(state !== 'granted') return { ok:false, reason:state };
@@ -1706,9 +1782,21 @@ async function maybeNotifyAppNotice(){
     if(fingerprint) localStorage.setItem(STORAGE_KEYS.appNoticeSeen, fingerprint);
     return;
   }
+  pushInAppNotification({
+    title: title || 'Ratownik PLK',
+    body: text || 'Dodano nowy komunikat dla użytkowników.',
+    source: 'Komunikat dla użytkowników',
+    level: 'notice',
+    createdAt: appNotice?.updatedAt || new Date().toISOString()
+  });
+  if(fingerprint) localStorage.setItem(STORAGE_KEYS.appNoticeSeen, fingerprint);
   if(canUseNotifications() && Notification.permission === 'granted'){
-    const result = await notifyLocal(title || 'Ratownik PLK', text || 'Dodano nowy komunikat dla użytkowników.');
-    if(result?.ok && fingerprint) localStorage.setItem(STORAGE_KEYS.appNoticeSeen, fingerprint);
+    await notifyLocal(title || 'Ratownik PLK', text || 'Dodano nowy komunikat dla użytkowników.', {
+      skipInApp: true,
+      source: 'Komunikat dla użytkowników',
+      level: 'notice',
+      createdAt: appNotice?.updatedAt || new Date().toISOString()
+    });
   }
 }
 function setTheme(mode){
@@ -1805,12 +1893,12 @@ function fillAlgorithmForm(algo){
   $('saveAlgorithmBtn').textContent = normalized ? 'Zapisz zmiany algorytmu' : 'Dodaj algorytm';
   $('cancelAlgorithmEditBtn').hidden = !normalized;
 }
-function renderTopicCard(topic){
+function renderTopicCard(topic, displayNumber=null){
   const t = normalizeTopic(topic);
   return `
     <details class="topic">
       <summary>
-        <span class="topic-title"><span class="topic-icon">${esc(t.icon || '🩺')}</span><span>${t.n}. ${esc(t.t)}</span></span>
+        <span class="topic-title"><span class="topic-icon">${esc(t.icon || '🩺')}</span><span>${esc(displayNumber ?? t.n)}. ${esc(t.t)}</span></span>
         <span class="topic-toggle">+</span>
       </summary>
       <div class="topic-body topic-body-wide">
@@ -1830,6 +1918,7 @@ function renderTopics(query=''){
   const q = query.trim().toLowerCase();
   renumberTopics();
   const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
+  const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
   const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
   const grouped = groupTopicsByCategory(filtered);
   $('topics').innerHTML = grouped.map((group, idx) => `
@@ -1842,7 +1931,7 @@ function renderTopics(query=''){
         <span class="topic-toggle">+</span>
       </summary>
       <div class="topic-category-body">
-        ${group.topics.map(topic => renderTopicCard(topic)).join('')}
+        ${group.topics.map(topic => renderTopicCard(topic, topicCategoryIndexMap.get(topic.id) || topic.n)).join('')}
       </div>
     </details>
   `).join('') || '<div class="empty-state">Brak tematów pasujących do wyszukiwania.</div>';
@@ -1991,14 +2080,16 @@ function renderKits(query=''){
   if($('expiredKitReportOutput')) $('expiredKitReportOutput').value = buildExpiredKitReport();
 }
 function renderAdminTopics(){
+  const topicCategoryIndexMap = buildTopicCategoryIndexMap(topics);
   $('adminTopicTable').innerHTML = topics.map((topic, idx) => {
     const t = normalizeTopic(topic, idx);
     const main = t.s.find(sec => sec[0] !== 'warn') || t.s[0];
     const warn = t.s.find(sec => sec[0] === 'warn');
+    const displayNumber = topicCategoryIndexMap.get(t.id) || t.n;
     return `
     <div class="admin-row topic-admin-row">
       <div>
-        <strong>${esc(t.n)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
+        <strong>${esc(displayNumber)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
         <small>${esc(t.category || 'Pierwsza pomoc')} • ${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
       </div>
       <div class="row admin-actions">
@@ -2038,6 +2129,7 @@ function renderAll(){
   sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
+  sanitizeNotificationInbox();
   sanitizeHistoryState();
   renderTopics($('topicSearch')?.value || '');
   renderAlgorithms($('algorithmSearch')?.value || '');
@@ -2055,9 +2147,30 @@ normalizeAppInfo();
   autoGrowTextarea($('description'));
   updateCurrentContextInfo();
   renderOfflineSummary();
+  renderNotificationInbox();
   renderAppNotice();
 }
-
+function renderNotificationInbox(){
+  sanitizeNotificationInbox();
+  const box = $('notificationInbox');
+  const badge = $('notificationInboxBadge');
+  if(badge) badge.textContent = `W aplikacji: ${notificationInbox.length}`;
+  if(!box) return;
+  if(!notificationInbox.length){
+    box.innerHTML = '<div class="empty-state">Nowe powiadomienia będą widoczne tutaj także w aplikacji.</div>';
+    return;
+  }
+  box.innerHTML = notificationInbox.slice(0, 8).map(item => `
+    <article class="notification-card ${esc(item.level || 'info')}">
+      <div class="notification-card-head">
+        <strong>${sanitizeRichText(item.title || 'Powiadomienie')}</strong>
+        <span>${esc(formatNotificationTime(item.createdAt) || '')}</span>
+      </div>
+      ${item.body ? `<div class="rich-text notification-card-body">${sanitizeRichText(item.body)}</div>` : ''}
+      <small>${esc(item.source || 'Aplikacja')}</small>
+    </article>
+  `).join('');
+}
 function renderAppNotice(){
   normalizeAppInfo();
   const box = $('appNoticeBanner');
@@ -2140,6 +2253,7 @@ if ($('appInfoBtn')) $('appInfoBtn').addEventListener('click', window.openAppInf
 if ($('closeAppInfoBtn')) $('closeAppInfoBtn').onclick = () => closeModalById('appInfoModal');
 if ($('notificationInfoBtn')) $('notificationInfoBtn').addEventListener('click', window.openNotificationInfoModal);
 if ($('closeNotificationInfoBtn')) $('closeNotificationInfoBtn').onclick = () => closeModalById('notificationInfoModal');
+if ($('clearInAppNotificationsBtn')) $('clearInAppNotificationsBtn').onclick = () => clearInAppNotifications();
 if ($('openOfflineBtn')) $('openOfflineBtn').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = false; renderOfflineSummary(); };
 if ($('openOfflineInlineBtn')) $('openOfflineInlineBtn').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = false; renderOfflineSummary(); };
 if ($('openOfflineBtnInline')) $('openOfflineBtnInline').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = false; renderOfflineSummary(); };
@@ -2363,7 +2477,7 @@ if ($('enableNotificationsBtn')) $('enableNotificationsBtn').onclick = async () 
   const result = await ensureNotificationPermission(true);
   refreshNotificationButtons();
   if(result === 'granted'){
-    const test = await notifyLocal('Ratownik PLK', 'Powiadomienia lokalne zostały włączone.');
+    const test = await notifyLocal('Ratownik PLK', 'Powiadomienia lokalne zostały włączone.', { source:'Ustawienia powiadomień', level:'notice' });
     if(test.ok){
       alert('Powiadomienia włączone i działają poprawnie.');
     }else{
@@ -2380,7 +2494,7 @@ if ($('testNotificationBtn')) $('testNotificationBtn').onclick = async () => {
   if(!window.isSecureContext) return alert('Test powiadomień działa tylko przez HTTPS albo w zainstalowanej aplikacji PWA.');
   const state = await ensureNotificationPermission(false);
   if(state !== 'granted') return alert('Powiadomienia nie są jeszcze aktywne. Kliknij „Włącz powiadomienia”, zaakceptuj zgodę przeglądarki i spróbuj ponownie.');
-  const result = await notifyLocal('Ratownik PLK', 'Test powiadomienia działa poprawnie.');
+  const result = await notifyLocal('Ratownik PLK', 'Test powiadomienia działa poprawnie.', { source:'Test powiadomień', level:'notice' });
   if(!result.ok) alert('Nie udało się wyświetlić testowego powiadomienia. Szczegóły: ' + result.reason);
 };
 if ($('selectAllRescuersBtn')) $('selectAllRescuersBtn').onclick = () => document.querySelectorAll('.rescuer-check').forEach(ch => ch.checked = true);
@@ -2391,7 +2505,7 @@ if ($('groupSmsBtn')) $(`groupSmsBtn`).onclick = () => {
   if(!selected.length) return alert('Zaznacz co najmniej jednego ratownika.');
   const numbers = selected.map(r => r.phone).join(',');
   const message = buildAlarmMessageForRescuers(selected);
-  notifyLocal('Alarm grupowy', `Przygotowano alarm dla ${selected.length} ratowników.`).catch(()=>{});
+  notifyLocal('Alarm grupowy', `Przygotowano alarm dla ${selected.length} ratowników.`, { source:'Alarmy', level:'alarm' }).catch(()=>{});
   location.href = 'sms:' + numbers + '?body=' + encodeURIComponent(message);
 };
 if ($('groupCallBtn')) $(`groupCallBtn`).onclick = () => alarmSelectedRescuers();
