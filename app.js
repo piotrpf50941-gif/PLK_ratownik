@@ -57,7 +57,7 @@ const defaultTopics = [
   {id:'t11', n:11, icon:'📍', t:'Zdarzenia w terenie', img:'assets/topics/sec11.jpg', lead:'W działaniach terenowych ogromne znaczenie ma dokładne przekazanie lokalizacji, punktów orientacyjnych i warunków dojazdu.', s:[['ok','Lokalizacja',['Podaj GPS z telefonu.','Podaj punkt orientacyjny i realny dojazd.']]]},
   {id:'t12', n:12, icon:'🩹', t:'Tamowanie krwotoków i opatrunek uciskowy', img:'assets/topics/sec07.jpg', lead:'Prawidłowo założony opatrunek uciskowy pozwala opanować wiele krwotoków bez konieczności użycia stazy.', s:[['ok','Postępowanie',['Załóż bezpośredni ucisk na ranę.','Nałóż jałowy opatrunek i dociśnij bandażem.','Jeśli opatrunek przemaka, dołóż kolejną warstwę bez zdejmowania poprzedniej.']]]},
   {id:'t13', n:13, icon:'😮‍💨', t:'Zadławienia', img:'assets/topics/sec03.jpg', lead:'W zadławieniu trzeba szybko ocenić, czy poszkodowany kaszle skutecznie, i wdrożyć odpowiednie czynności udrażniające.', s:[['ok','Postępowanie',['Zapytaj: czy możesz oddychać?','Jeśli kaszle – zachęcaj do kaszlu.','Jeśli nie może oddychać – 5 uderzeń między łopatki.','Następnie 5 uciśnięć nadbrzusza.','Przy utracie przytomności rozpocznij RKO i wezwij pomoc.']]]}
-];
+].map(topic => ({ category: inferDefaultTopicCategory(topic), ...topic }));
 const defaultAlgorithms = [
   {
     id:'alg1', icon:'🫀', title:'RKO dorosły', category:'RKO', accent:'danger',
@@ -340,6 +340,7 @@ function serializeRowForOnline(table, row, idx=0){
     return {
       id: item.id,
       n: item.n,
+      category: item.category,
       icon: item.icon,
       t: item.t,
       img: item.img,
@@ -904,6 +905,7 @@ function mapCsvRowToEntity(type, row, idx){
     const item = normalizeTopic({
       id: row.id || `t${Date.now()}_${idx}`,
       n: Number(row.n) || idx + 1,
+      category: row.category || row.kategoria || row.group || '',
       icon: row.icon || '🩺',
       title: row.title || row.t || '',
       img: row.img || row.image || '',
@@ -1377,9 +1379,45 @@ function summarizeAlgorithm(item){
 }
 function summarizeTopic(item){
   const topic = normalizeTopic(item || {});
-  return `${topic.icon || '🩺'} ${topic.t || 'Temat'} • sekcji: ${(topic.s || []).length} • obrazów: ${(topic.images || []).length}`;
+  return `${topic.icon || '🩺'} ${topic.t || 'Temat'} • kategoria: ${topic.category} • sekcji: ${(topic.s || []).length} • obrazów: ${(topic.images || []).length}`;
 }
+const TOPIC_CATEGORY_PRIORITY = ['Pierwsza pomoc','Kolej','Aplikacja'];
 const defaultTopicColors = { lead:'#2a6dd9', steps:'#1f8f4d', warn:'#c63b3b', notes:'#0b4fa2' };
+function inferDefaultTopicCategory(topic){
+  const id = String(topic?.id || '').trim().toLowerCase();
+  const text = String(topic?.category || topic?.t || topic?.title || '').trim().toLowerCase();
+  if(id === 't11' || /kolej|tor|teren/.test(text)) return 'Kolej';
+  if(/aplikacj|panel|offline/.test(text)) return 'Aplikacja';
+  return 'Pierwsza pomoc';
+}
+function normalizeTopicCategory(value, topic){
+  const txt = String(value ?? '').trim();
+  return txt || inferDefaultTopicCategory(topic);
+}
+function getTopicCategoryPriority(category){
+  const normalized = normalizeTopicCategory(category).toLowerCase();
+  const idx = TOPIC_CATEGORY_PRIORITY.findIndex(item => item.toLowerCase() === normalized);
+  return idx === -1 ? TOPIC_CATEGORY_PRIORITY.length : idx;
+}
+function groupTopicsByCategory(items){
+  const map = new Map();
+  (Array.isArray(items) ? items : []).forEach((topic, idx) => {
+    const normalized = normalizeTopic(topic, idx);
+    const category = normalized.category;
+    if(!map.has(category)) map.set(category, []);
+    map.get(category).push(normalized);
+  });
+  return [...map.entries()]
+    .sort((a, b) => {
+      const order = getTopicCategoryPriority(a[0]) - getTopicCategoryPriority(b[0]);
+      if(order) return order;
+      const aFirst = Number(a[1]?.[0]?.n) || 9999;
+      const bFirst = Number(b[1]?.[0]?.n) || 9999;
+      if(aFirst !== bFirst) return aFirst - bFirst;
+      return String(a[0] || '').localeCompare(String(b[0] || ''), 'pl');
+    })
+    .map(([category, topics]) => ({ category, topics }));
+}
 function hexToRgb(hex){
   const clean = String(hex || '').replace('#','').trim();
   if(!/^[0-9a-fA-F]{6}$/.test(clean)) return {r:42,g:109,b:217};
@@ -1477,6 +1515,7 @@ function normalizeTopic(topic, idx=0){
   return {
     id: topic?.id || `t${Date.now()}_${idx}`,
     n: Number(topic?.n) || idx + 1,
+    category: normalizeTopicCategory(topic?.category ?? topic?.group ?? topic?.sectionCategory, topic),
     icon: topic?.icon || '🩺',
     t: topic?.t || topic?.title || 'Nowy temat',
     img: images[0] || 'assets/topics/sec01.jpg',
@@ -1733,6 +1772,7 @@ function fillTopicForm(topic){
   currentTopicEditId = normalized?.id || null;
   $('topicFormTitle').textContent = normalized ? 'Edytuj temat' : 'Dodaj temat';
   $('topicTitle').value = normalized?.t || '';
+  if ($('topicCategory')) $('topicCategory').value = normalized?.category || 'Pierwsza pomoc';
   $('topicIcon').value = normalized?.icon || '🩺';
   $('topicImage').value = Array.isArray(normalized?.images) && normalized.images.length ? normalized.images.join('\n') : (normalized?.img || '');
   if ($('topicLeadTitle')) $('topicLeadTitle').value = normalized?.leadTitle || 'Wstęp';
@@ -1765,12 +1805,9 @@ function fillAlgorithmForm(algo){
   $('saveAlgorithmBtn').textContent = normalized ? 'Zapisz zmiany algorytmu' : 'Dodaj algorytm';
   $('cancelAlgorithmEditBtn').hidden = !normalized;
 }
-function renderTopics(query=''){
-  const q = query.trim().toLowerCase();
-  renumberTopics();
-  const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
-  const filtered = normalizedTopics.filter(t => !q || [t.t, t.icon, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
-  $('topics').innerHTML = filtered.map(t => `
+function renderTopicCard(topic){
+  const t = normalizeTopic(topic);
+  return `
     <details class="topic">
       <summary>
         <span class="topic-title"><span class="topic-icon">${esc(t.icon || '🩺')}</span><span>${t.n}. ${esc(t.t)}</span></span>
@@ -1787,9 +1824,30 @@ function renderTopics(query=''){
         </div>
       </div>
     </details>
+  `;
+}
+function renderTopics(query=''){
+  const q = query.trim().toLowerCase();
+  renumberTopics();
+  const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
+  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
+  const grouped = groupTopicsByCategory(filtered);
+  $('topics').innerHTML = grouped.map((group, idx) => `
+    <details class="topic-category" ${q || idx === 0 ? 'open' : ''}>
+      <summary>
+        <span class="topic-category-title">
+          <span class="topic-category-badge">${esc(group.category)}</span>
+          <small>${group.topics.length} ${group.topics.length === 1 ? 'temat' : 'tematów'}</small>
+        </span>
+        <span class="topic-toggle">+</span>
+      </summary>
+      <div class="topic-category-body">
+        ${group.topics.map(topic => renderTopicCard(topic)).join('')}
+      </div>
+    </details>
   `).join('') || '<div class="empty-state">Brak tematów pasujących do wyszukiwania.</div>';
-  document.querySelectorAll('.topic').forEach(d => d.addEventListener('toggle', () => {
-    const toggle = d.querySelector('.topic-toggle');
+  document.querySelectorAll('.topic, .topic-category').forEach(d => d.addEventListener('toggle', () => {
+    const toggle = d.querySelector('summary .topic-toggle');
     if (toggle) toggle.textContent = d.open ? '–' : '+';
   }));
 }
@@ -1941,7 +1999,7 @@ function renderAdminTopics(){
     <div class="admin-row topic-admin-row">
       <div>
         <strong>${esc(t.n)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
-        <small>${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
+        <small>${esc(t.category || 'Pierwsza pomoc')} • ${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
       </div>
       <div class="row admin-actions">
         <button class="ghost" data-move-topic="up:${t.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
@@ -2041,7 +2099,7 @@ function upsertEntity(arr, item){
   if(idx >= 0) arr[idx] = item; else arr.push(item);
 }
 function resetEntityForms(){
-  ['adminRescuerName','adminRescuerPhone','adminRescuerZone','adminRescuerLocation','adminRescuerShift','adminRescuerSkills','adminRescuerAlarmGroup','adminAedName','adminAedLocation','adminAedLat','adminAedLon','adminKitName','adminKitLocation','adminKitType','adminKitCategories','adminKitContents','algorithmTitle','algorithmIcon','algorithmCategory','algorithmAccent','algorithmSteps','topicTitle','topicIcon','topicImage','topicLead','topicIntro','topicSteps','topicWarnTitle','topicWarnSteps','topicNotes'].forEach(id => { if($(id)) $(id).value = ''; });
+  ['adminRescuerName','adminRescuerPhone','adminRescuerZone','adminRescuerLocation','adminRescuerShift','adminRescuerSkills','adminRescuerAlarmGroup','adminAedName','adminAedLocation','adminAedLat','adminAedLon','adminKitName','adminKitLocation','adminKitType','adminKitCategories','adminKitContents','algorithmTitle','algorithmIcon','algorithmCategory','algorithmAccent','algorithmSteps','topicTitle','topicCategory','topicIcon','topicImage','topicLead','topicIntro','topicSteps','topicWarnTitle','topicWarnSteps','topicNotes'].forEach(id => { if($(id)) $(id).value = ''; });
   $('addRescuerBtn').textContent = 'Dodaj / zapisz ratownika';
   $('addAedBtn').textContent = 'Dodaj / zapisz AED';
   $('addKitBtn').textContent = 'Dodaj / zapisz apteczkę';
@@ -2453,6 +2511,7 @@ $('saveTopicBtn').onclick = () => {
   const item = {
     id: currentTopicEditId || 't'+Date.now(),
     n: topics.length + 1,
+    category: $('topicCategory')?.value.trim() || 'Pierwsza pomoc',
     icon: $('topicIcon').value.trim() || '🩺',
     t: title,
     images: ($('topicImage').value || '').split(/\r?\n|,/).map(x => x.trim()).filter(Boolean).slice(0,4),

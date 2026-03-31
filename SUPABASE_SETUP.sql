@@ -33,6 +33,7 @@ create table if not exists public.kits (
 create table if not exists public.topics (
   id text primary key,
   n integer,
+  category text,
   icon text,
   t text not null,
   img text,
@@ -81,7 +82,9 @@ alter table public.kits add column if not exists categories text[] default '{}';
 alter table public.kits add column if not exists items jsonb default '[]'::jsonb;
 
 alter table public.topics add column if not exists n integer;
+alter table public.topics add column if not exists category text;
 alter table public.topics add column if not exists icon text;
+alter table public.topics add column if not exists t text;
 alter table public.topics add column if not exists img text;
 alter table public.topics add column if not exists images text[] default '{}';
 alter table public.topics add column if not exists lead text;
@@ -92,6 +95,23 @@ alter table public.topics add column if not exists "warnColor" text;
 alter table public.topics add column if not exists "notesColor" text;
 alter table public.topics add column if not exists s jsonb default '[]'::jsonb;
 alter table public.topics add column if not exists "relatedAlgorithmIds" text[] default '{}';
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'topics'
+      and column_name = 'title'
+  ) then
+    execute 'update public.topics set t = coalesce(nullif(t, ''''), title) where coalesce(t, '''') = ''''';
+  end if;
+end $$;
+
+update public.topics
+set t = 'Temat'
+where coalesce(t, '') = '';
 
 alter table public.algorithms add column if not exists icon text;
 alter table public.algorithms add column if not exists category text;

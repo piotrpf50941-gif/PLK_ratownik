@@ -94,14 +94,14 @@
 
       <section class="card">
         <div class="card-head wrap-mobile">
-          <h2>Szybkie tematy pierwszej pomocy</h2>
+          <h2>Szybkie tematy</h2>
           <div class="row">
             <button class="ghost" id="startMetronomeBtn">Metronom 110/min</button>
             <button class="ghost" id="stopMetronomeBtn">Stop</button>
           </div>
         </div>
         <div class="search-row">
-          <input id="topicSearch" class="search-input wide" placeholder="Szukaj tematów, np. zadławienia, RKO, krwotok, oparzenia">
+          <input id="topicSearch" class="search-input wide" placeholder="Szukaj tematów lub kategorii, np. zadławienia, RKO, kolej, aplikacja">
           <button class="ghost" id="clearTopicSearchBtn">Wyczyść</button>
         </div>
         <div id="topics"></div>
@@ -286,13 +286,14 @@ igła i-gel | 4 | 1 | 2027-12-31"></textarea></label>
       </section>
       <section class="card">
         <div class="card-head wrap-mobile">
-          <h2>Tematy pierwszej pomocy</h2>
+          <h2>Szybkie tematy</h2>
           <button class="ghost" data-jump-screen="screen-start">Podgląd tematów</button>
         </div>
         <div class="grid2 admin-topic-layout">
           <div>
             <h3 id="topicFormTitle">Dodaj temat</h3>
             <label><span>Tytuł</span><input id="topicTitle" placeholder="np. Zadławienia"></label>
+            <label><span>Kategoria</span><input id="topicCategory" value="Pierwsza pomoc" placeholder="np. Pierwsza pomoc, Kolej, Aplikacja"></label>
             <label><span>Ikona</span><input id="topicIcon" placeholder="np. 😮‍💨"></label>
             <label><span>Obrazy (maks. 4, każdy w nowej linii)</span><textarea id="topicImage" rows="4" placeholder="np. assets/topics/sec03.jpg
 assets/topics/sec04.jpg"></textarea></label>
@@ -338,7 +339,7 @@ assets/topics/sec04.jpg"></textarea></label>
               <input id="importTopicsCsv" type="file" accept=".csv,text/csv" hidden>
               <button class="ghost" id="cancelTopicEditBtn" hidden>Anuluj edycję</button>
             </div>
-            <p class="note">CSV tematów: id;n;icon;title;img;lead;sections. Pole sections wpisz np.: ok :: Rozpoznanie miejsca zdarzenia :: Krok 1 | Krok 2 || warn :: Ważne :: Ostrzeżenie 1</p>
+            <p class="note">CSV tematów: id;n;category;icon;title;img;lead;sections. Pole sections wpisz np.: ok :: Rozpoznanie miejsca zdarzenia :: Krok 1 | Krok 2 || warn :: Ważne :: Ostrzeżenie 1</p>
           </div>
           <div>
             <h3>Lista tematów</h3>
