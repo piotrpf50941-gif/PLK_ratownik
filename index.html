@@ -21,9 +21,9 @@
       </div>
     </div>
     <div class="row topbar-actions">
-      <button id="nightModeBtn" class="ghost">🌙 Tryb nocny</button>
-      <button id="topOfflineBtn" class="ghost tech-btn">📴 Offline i numery</button>
-      <button id="appInfoBtn" class="ghost tech-btn" type="button">ℹ️ Informacje o aplikacji</button>
+      <button id="nightModeBtn" class="ghost tech-btn icon-btn" type="button" title="Tryb nocny" aria-label="Tryb nocny">🌙</button>
+      <button id="topOfflineBtn" class="ghost tech-btn icon-btn" type="button" title="Offline i numery" aria-label="Offline i numery">📴</button>
+      <button id="appInfoBtn" class="ghost tech-btn icon-btn" type="button" title="Informacje o aplikacji" aria-label="Informacje o aplikacji">ℹ️</button>
       <button id="installBtn" class="ghost" hidden>Zainstaluj</button>
     </div>
   </header>
@@ -31,6 +31,19 @@
   <main class="app">
     <section class="screen active" id="screen-start">
       <div id="appNoticeBanner" class="notice-banner" hidden></div>
+      <section class="card">
+        <div class="card-head wrap-mobile">
+          <h2>Powiadomienia</h2>
+          <div class="row wrap-mobile">
+            <button class="ghost" id="enableNotificationsBtn">Włącz powiadomienia</button>
+          </div>
+        </div>
+        <div class="row wrap-mobile" style="margin-top:4px">
+          <span id="notificationInboxBadge" class="badge">W aplikacji: 0</span>
+          <button class="ghost" id="clearInAppNotificationsBtn">Wyczyść listę</button>
+        </div>
+        <div id="notificationInbox" class="notification-inbox"></div>
+      </section>
       <section id="offlineInlineCard" class="card offline-inline-card" hidden>
         <div class="card-head wrap-mobile">
           <h2>Tryb offline — najważniejsze algorytmy</h2>
@@ -73,28 +86,11 @@
           </label>
           <label><span>Liczba poszkodowanych</span><input id="casualties" type="number" min="1" value="1"></label>
         </div>
-        <label><span>Opis sytuacji</span><textarea id="description" rows="2" class="autogrow" placeholder="Krótki opis stanu poszkodowanego i zdarzenia"></textarea></label>
+        <label><span>Opis sytuacji</span><textarea id="description" rows="1" class="autogrow" data-autogrow-min="46" data-autogrow-max="180" placeholder="Krótki opis stanu poszkodowanego i zdarzenia"></textarea></label>
         <div class="row wrap-mobile report-actions">
           <button class="solid primary" id="prepRatBtn">Przygotuj ratownika</button>
         </div>
-        <textarea id="reportOutput" rows="8" readonly placeholder="Tutaj pojawi się gotowa treść zgłoszenia do skopiowania"></textarea>
-      </section>
-
-      <section class="card">
-        <div class="card-head wrap-mobile">
-          <h2>Powiadomienia</h2>
-          <div class="row wrap-mobile">
-            <button class="ghost" id="enableNotificationsBtn">Włącz powiadomienia</button>
-            <button class="ghost" id="testNotificationBtn">Test</button>
-            <button class="ghost" id="notificationInfoBtn" type="button">Co to jest?</button>
-          </div>
-        </div>
-        <p class="note">Lokalne notyfikacje aplikacji na tym urządzeniu. Do komunikatów dla wszystkich użytkowników służy komunikat startowy w MASTER + synchronizacja online przez Supabase.</p>
-        <div class="row wrap-mobile" style="margin-top:12px">
-          <span id="notificationInboxBadge" class="badge">W aplikacji: 0</span>
-          <button class="ghost" id="clearInAppNotificationsBtn">Wyczyść listę</button>
-        </div>
-        <div id="notificationInbox" class="notification-inbox"></div>
+        <textarea id="reportOutput" rows="1" class="autogrow report-output" data-autogrow-min="46" data-autogrow-max="280" readonly placeholder="Tutaj pojawi się gotowa treść zgłoszenia do skopiowania"></textarea>
       </section>
 
       <section class="card">

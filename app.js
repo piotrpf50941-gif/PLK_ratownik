@@ -1804,7 +1804,11 @@ function setTheme(mode){
   document.body.classList.toggle('night-mode', dark);
   localStorage.setItem(STORAGE_KEYS.theme, dark ? 'dark' : 'light');
   const btn = $('nightModeBtn');
-  if (btn) btn.textContent = dark ? '☀️ Tryb dzienny' : '🌙 Tryb nocny';
+  if (btn){
+    btn.textContent = dark ? '☀️' : '🌙';
+    btn.title = dark ? 'Tryb dzienny' : 'Tryb nocny';
+    btn.setAttribute('aria-label', dark ? 'Tryb dzienny' : 'Tryb nocny');
+  }
 }
 function locationText(){
   return [
@@ -1838,8 +1842,12 @@ function renderAdminEventTypes(){
 }
 function autoGrowTextarea(el){
   if(!el) return;
+  const minHeight = Number(el.dataset.autogrowMin || 46);
+  const maxHeight = Number(el.dataset.autogrowMax || 360);
   el.style.height = 'auto';
-  el.style.height = Math.min(Math.max(el.scrollHeight, 72), 360) + 'px';
+  const nextHeight = Math.min(Math.max(el.scrollHeight, minHeight), maxHeight);
+  el.style.height = nextHeight + 'px';
+  el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
 }
 function reportFor(target){
   return `Adresat: ${target}\nTyp zdarzenia: ${$('eventType').value}\nLiczba poszkodowanych: ${$('casualties').value}\nLokalizacja: ${locationText()}\nOpis: ${$('description').value.trim() || 'Brak dodatkowego opisu.'}`;
@@ -2145,6 +2153,7 @@ normalizeAppInfo();
   renderAlarmHistory();
   populateEventTypeSelect();
   autoGrowTextarea($('description'));
+  autoGrowTextarea($('reportOutput'));
   updateCurrentContextInfo();
   renderOfflineSummary();
   renderNotificationInbox();
@@ -2229,9 +2238,9 @@ function resetEntityForms(){
 // Reporting & utility buttons
 $('copyLocBtn').onclick = async () => navigator.clipboard.writeText(locationText());
 $('copyReportBtn').onclick = async () => navigator.clipboard.writeText($('reportOutput').value);
-if ($('prep112Btn')) $('prep112Btn').onclick = () => { $('reportOutput').value = reportFor('112'); autoGrowTextarea($('description')); };
-if ($('prep999Btn')) $('prep999Btn').onclick = () => { $('reportOutput').value = reportFor('999'); autoGrowTextarea($('description')); };
-if ($('prepRatBtn')) $('prepRatBtn').onclick = () => { $('reportOutput').value = reportFor('ratownik zakładowy'); autoGrowTextarea($('description')); };
+if ($('prep112Btn')) $('prep112Btn').onclick = () => { $('reportOutput').value = reportFor('112'); autoGrowTextarea($('description')); autoGrowTextarea($('reportOutput')); };
+if ($('prep999Btn')) $('prep999Btn').onclick = () => { $('reportOutput').value = reportFor('999'); autoGrowTextarea($('description')); autoGrowTextarea($('reportOutput')); };
+if ($('prepRatBtn')) $('prepRatBtn').onclick = () => { $('reportOutput').value = reportFor('ratownik zakładowy'); autoGrowTextarea($('description')); autoGrowTextarea($('reportOutput')); };
 if ($('description')) $('description').addEventListener('input', () => autoGrowTextarea($('description')));
 $('call112Btn').onclick = () => location.href = 'tel:112';
 $('call999Btn').onclick = () => location.href = 'tel:999';
