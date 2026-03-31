@@ -2461,19 +2461,102 @@ if(masterTrigger){
   });
 }
 // Metronome
-let audioCtx = null, metro = null;
-function tick(){
-  audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
-  const o = audioCtx.createOscillator(), g = audioCtx.createGain();
-  o.frequency.value = 880; o.type = 'square';
-  g.gain.setValueAtTime(0.0001, audioCtx.currentTime);
-  g.gain.exponentialRampToValueAtTime(0.18, audioCtx.currentTime + 0.005);
-  g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.08);
-  o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.09);
+let audioCtx = null;
+let metroTimer = null;
+let metroRunning = false;
+let metroNextTickAt = 0;
+const METRONOME_BPM = 110;
+const METRONOME_INTERVAL_SEC = 60 / METRONOME_BPM;
+const METRONOME_LOOKAHEAD_MS = 60;
+const METRONOME_SCHEDULE_AHEAD_SEC = 0.18;
+const METRONOME_RESYNC_THRESHOLD_SEC = 0.35;
+async function ensureMetronomeAudioContext(){
+  const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+  if(!AudioContextCtor) throw new Error('Ta przeglądarka nie obsługuje Web Audio.');
+  audioCtx = audioCtx || new AudioContextCtor();
+  if(audioCtx.state === 'suspended'){
+    try{
+      await audioCtx.resume();
+    }catch(_){}
+  }
+  return audioCtx;
 }
-$('startMetronomeBtn').onclick = () => { if(metro) clearInterval(metro); tick(); metro = setInterval(tick, 60000/110); };
+function scheduleMetronomeTick(atTime){
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = 880;
+  osc.type = 'square';
+  gain.gain.setValueAtTime(0.0001, atTime);
+  gain.gain.exponentialRampToValueAtTime(0.18, atTime + 0.005);
+  gain.gain.exponentialRampToValueAtTime(0.0001, atTime + 0.08);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + 0.09);
+}
+function stopMetronome(){
+  metroRunning = false;
+  if(metroTimer){
+    clearTimeout(metroTimer);
+    metroTimer = null;
+  }
+}
+function runMetronomeScheduler(){
+  if(!metroRunning || !audioCtx) return;
+  if(metroTimer){
+    clearTimeout(metroTimer);
+    metroTimer = null;
+  }
+  if(audioCtx.state !== 'running'){
+    metroTimer = setTimeout(() => {
+      ensureMetronomeAudioContext().then(() => {
+        if(metroRunning) runMetronomeScheduler();
+      }).catch(() => {});
+    }, METRONOME_LOOKAHEAD_MS);
+    return;
+  }
+  const now = audioCtx.currentTime;
+  if(!metroNextTickAt || metroNextTickAt < now - METRONOME_RESYNC_THRESHOLD_SEC){
+    // On phones timers can freeze briefly; after wakeup we resync instead of replaying missed beats in a burst.
+    metroNextTickAt = now + 0.03;
+  }
+  while(metroNextTickAt < now + METRONOME_SCHEDULE_AHEAD_SEC){
+    scheduleMetronomeTick(metroNextTickAt);
+    metroNextTickAt += METRONOME_INTERVAL_SEC;
+  }
+  metroTimer = setTimeout(runMetronomeScheduler, METRONOME_LOOKAHEAD_MS);
+}
+async function startMetronome(){
+  stopMetronome();
+  try{
+    const ctx = await ensureMetronomeAudioContext();
+    metroRunning = true;
+    metroNextTickAt = ctx.currentTime + 0.03;
+    runMetronomeScheduler();
+  }catch(err){
+    alert('Nie udało się uruchomić metronomu: ' + (err?.message || err));
+  }
+}
+$('startMetronomeBtn').onclick = () => { startMetronome(); };
 refreshNotificationButtons();
-$('stopMetronomeBtn').onclick = () => { if(metro) clearInterval(metro); metro = null; };
+$('stopMetronomeBtn').onclick = () => { stopMetronome(); };
+document.addEventListener('visibilitychange', () => {
+  if(!metroRunning) return;
+  if(document.hidden){
+    if(metroTimer){
+      clearTimeout(metroTimer);
+      metroTimer = null;
+    }
+    return;
+  }
+  ensureMetronomeAudioContext().then(() => {
+    if(audioCtx){
+      metroNextTickAt = audioCtx.currentTime + 0.03;
+    }
+    if(metroRunning) runMetronomeScheduler();
+  }).catch(() => {});
+});
+window.addEventListener('pagehide', () => stopMetronome());
 if ($('enableNotificationsBtn')) $('enableNotificationsBtn').onclick = async () => {
   if(!('Notification' in window)) return alert('Ta przeglądarka nie obsługuje powiadomień.');
   if(!window.isSecureContext) return alert('Powiadomienia wymagają bezpiecznego połączenia HTTPS albo uruchomienia aplikacji jako zainstalowane PWA z GitHub Pages.');
