@@ -1929,8 +1929,8 @@ function renderTopics(query=''){
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
   const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
   const grouped = groupTopicsByCategory(filtered);
-  $('topics').innerHTML = grouped.map((group, idx) => `
-    <details class="topic-category" ${q || idx === 0 ? 'open' : ''}>
+  $('topics').innerHTML = grouped.map(group => `
+    <details class="topic-category" ${q ? 'open' : ''}>
       <summary>
         <span class="topic-category-title">
           <span class="topic-category-badge">${esc(group.category)}</span>
@@ -1943,10 +1943,14 @@ function renderTopics(query=''){
       </div>
     </details>
   `).join('') || '<div class="empty-state">Brak tematów pasujących do wyszukiwania.</div>';
-  document.querySelectorAll('.topic, .topic-category').forEach(d => d.addEventListener('toggle', () => {
+  const updateTopicToggle = (d) => {
     const toggle = d.querySelector('summary .topic-toggle');
     if (toggle) toggle.textContent = d.open ? '–' : '+';
-  }));
+  };
+  document.querySelectorAll('.topic, .topic-category').forEach(d => {
+    updateTopicToggle(d);
+    d.addEventListener('toggle', () => updateTopicToggle(d));
+  });
 }
 function getAlgorithmById(id){
   return algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).find(a => a.id === id) || algorithms.map((a, idx) => normalizeAlgorithm(a, idx))[0] || null;
