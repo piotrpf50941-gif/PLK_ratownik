@@ -2649,52 +2649,84 @@ function renderOfflineAlgorithmPriorityEditor(){
     .map(id => algorithms.find((algo, idx) => normalizeAlgorithm(algo, idx).id === id))
     .filter(Boolean)
     .map((algo, idx) => normalizeAlgorithm(algo, idx));
-  box.innerHTML = list.map((algo, idx) => `
+  if(!list.length){
+    box.innerHTML = '<div class="empty-state">Zaznacz algorytmy na liście poniżej, aby ustawić ich kolejność offline.</div>';
+    return;
+  }
+  const groupedList = list.map((algo, idx) => `
+    <div class="admin-list-item">
+      <div class="details-summary-main">
+        <strong>${idx + 1}. ${esc(algo.icon)} ${esc(algo.title)}</strong>
+        <div class="details-summary-meta">
+          <span>${esc(algo.category)} • ${algo.steps.length} kroków</span>
+        </div>
+      </div>
+      <div class="row admin-actions">
+        <button class="ghost" type="button" data-move-offline-algo="top" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>⇡</button>
+        <button class="ghost" type="button" data-move-offline-algo="up" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ghost" type="button" data-move-offline-algo="down" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="ghost" type="button" data-move-offline-algo="bottom" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>⇣</button>
+      </div>
+    </div>
+  `).join('');
+  box.innerHTML = `
     <details class="admin-collapsible">
       <summary>
         <div class="details-summary-main">
-          <strong>${idx + 1}. ${esc(algo.icon)} ${esc(algo.title)}</strong>
+          <strong>Kolejność w trybie offline</strong>
           <div class="details-summary-meta">
-            <span>${esc(algo.category)} • ${algo.steps.length} kroków</span>
+            <span>${list.length} ${list.length === 1 ? 'algorytm' : 'algorytmów'}</span>
           </div>
         </div>
         <span class="disclosure-indicator" aria-hidden="true"></span>
       </summary>
       <div class="admin-collapsible-body">
-        <div class="row admin-actions">
-          <button class="ghost" type="button" data-move-offline-algo="top" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>⇡</button>
-          <button class="ghost" type="button" data-move-offline-algo="up" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-          <button class="ghost" type="button" data-move-offline-algo="down" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
-          <button class="ghost" type="button" data-move-offline-algo="bottom" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>⇣</button>
-        </div>
+        ${groupedList}
       </div>
     </details>
-  `).join('') || '<div class="empty-state">Zaznacz algorytmy na liście poniżej, aby ustawić ich kolejność offline.</div>';
+  `;
 }
 function renderAdminAlgorithms(){
-  $('adminAlgorithmTable').innerHTML = algorithms.map((algo, idx) => {
+  const box = $('adminAlgorithmTable');
+  if(!box) return;
+  if(!algorithms.length){
+    box.innerHTML = '<div class="empty-state">Brak algorytmów.</div>';
+    return;
+  }
+  const groupedList = algorithms.map((algo, idx) => {
     const a = normalizeAlgorithm(algo, idx);
     return `
-      <details class="admin-collapsible">
-        <summary>
-          <div class="details-summary-main">
-            <strong>${esc(a.icon)} ${esc(a.title)}</strong>
-            <div class="details-summary-meta">
-              <span>${esc(a.category)} • ${a.steps.length} kroków • styl: ${esc(a.accent)}</span>
-            </div>
-          </div>
-          <span class="disclosure-indicator" aria-hidden="true"></span>
-        </summary>
-        <div class="admin-collapsible-body">
-          <label class="inline-check"><input type="checkbox" data-toggle-offline-algo="${a.id}" ${offlineAlgorithmIds.includes(a.id) ? 'checked' : ''}> Pokaż w trybie offline</label>
-          <div class="row admin-actions">
-            <button class="ghost" data-print-algo="${a.id}">Drukuj</button>
-            <button class="ghost" data-edit-algorithm="${a.id}">Edytuj</button>
-            <button class="ghost danger-lite" data-delete-algorithm="${a.id}">Usuń</button>
+      <div class="admin-list-item">
+        <div class="details-summary-main">
+          <strong>${esc(a.icon)} ${esc(a.title)}</strong>
+          <div class="details-summary-meta">
+            <span>${esc(a.category)} • ${a.steps.length} kroków • styl: ${esc(a.accent)}</span>
+            <label class="inline-check"><input type="checkbox" data-toggle-offline-algo="${a.id}" ${offlineAlgorithmIds.includes(a.id) ? 'checked' : ''}> Pokaż w trybie offline</label>
           </div>
         </div>
-      </details>`;
-  }).join('') || '<div class="empty-state">Brak algorytmów.</div>';
+        <div class="row admin-actions">
+          <button class="ghost" data-print-algo="${a.id}">Drukuj</button>
+          <button class="ghost" data-edit-algorithm="${a.id}">Edytuj</button>
+          <button class="ghost danger-lite" data-delete-algorithm="${a.id}">Usuń</button>
+        </div>
+      </div>`;
+  }).join('');
+  box.innerHTML = `
+    <details class="admin-collapsible">
+      <summary>
+        <div class="details-summary-main">
+          <strong>Lista algorytmów</strong>
+          <div class="details-summary-meta">
+            <span>${algorithms.length} ${algorithms.length === 1 ? 'algorytm' : 'algorytmów'}</span>
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-collapsible-body">
+        ${groupedList}
+      </div>
+    </details>
+  `;
 }
 function renderTopicAlgorithmPicker(selectedIds=[]){
   const box = $('topicAlgorithmLinks'); if(!box) return;

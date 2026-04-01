@@ -27,6 +27,9 @@ body.night-mode{
 .card{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:16px;box-shadow:var(--shadow)}
 .card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px}
 .card-head-actions{align-items:center;justify-content:flex-end}
+.quick-tools{display:grid;gap:8px;justify-items:end;width:100%;max-width:520px}
+.quick-tools-row{display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;width:100%}
+.quick-tools-row .badge{display:inline-flex;align-items:center;justify-content:center;min-height:44px}
 .wrap-mobile{flex-wrap:wrap}
 .card-head h2,h3{margin:0}
 .hero-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
@@ -160,6 +163,9 @@ body.night-mode code{background:#1a2940;color:#e4efff}
   .bottom-nav button{padding:10px 4px;font-size:.75rem;min-height:60px}
   .nav-ico{font-size:1.05rem}
   .stepper-step-text{font-size:1.05rem}
+  .quick-tools{max-width:none;justify-items:stretch}
+  .quick-tools-row{justify-content:stretch}
+  .quick-tools-row > *{flex:1 1 100%;max-width:none}
 }
 
 .block p{margin:0;line-height:1.5}

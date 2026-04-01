@@ -96,12 +96,16 @@
       <section class="card">
         <div class="card-head wrap-mobile">
           <h2>Szybkie tematy</h2>
-          <div class="row wrap-mobile">
-            <button class="ghost" id="startMetronomeBtn">Metronom 110/min</button>
-            <button class="ghost" id="startAssessmentTimerBtn">Timer 3 + 10 s</button>
-            <button class="ghost" id="stopAssessmentTimerBtn">Reset timera</button>
-            <button class="ghost" id="stopMetronomeBtn">Stop</button>
-            <span id="assessmentTimerBadge" class="badge" hidden>Timer gotowy</span>
+          <div class="quick-tools" aria-label="Narzędzia szybkich tematów">
+            <div class="quick-tools-row">
+              <button class="ghost" id="startAssessmentTimerBtn">Timer 3 + 10 s</button>
+              <button class="ghost" id="stopAssessmentTimerBtn">Restart timera</button>
+              <span id="assessmentTimerBadge" class="badge" hidden>Timer gotowy</span>
+            </div>
+            <div class="quick-tools-row">
+              <button class="ghost" id="startMetronomeBtn">Metronom 110/min</button>
+              <button class="ghost" id="stopMetronomeBtn">Stop</button>
+            </div>
           </div>
         </div>
         <div class="search-row">
