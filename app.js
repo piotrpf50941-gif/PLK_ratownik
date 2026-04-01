@@ -2469,14 +2469,19 @@ function renderAdminTopics(){
   const normalizedTopics = topics.map((topic, idx) => normalizeTopic(topic, idx));
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
   const grouped = groupTopicsByCategory(normalizedTopics);
-  $('adminTopicTable').innerHTML = grouped.map(group => `
+  const totalCategories = grouped.length;
+  $('adminTopicTable').innerHTML = grouped.map((group, groupIdx) => `
     <details class="topic-category admin-topic-category">
       <summary>
         <span class="topic-category-title">
           <span class="topic-category-badge">${esc(group.category)}</span>
           <small>${group.topics.length} ${group.topics.length === 1 ? 'temat' : 'tematów'}</small>
         </span>
-        <span class="topic-toggle">+</span>
+        <span class="topic-category-summary-actions">
+          <button class="ghost topic-category-move" type="button" data-move-topic-category="up" data-topic-category-name="${esc(group.category)}" ${groupIdx === 0 ? 'disabled' : ''} aria-label="Przesuń kategorię wyżej">↑</button>
+          <button class="ghost topic-category-move" type="button" data-move-topic-category="down" data-topic-category-name="${esc(group.category)}" ${groupIdx === totalCategories - 1 ? 'disabled' : ''} aria-label="Przesuń kategorię niżej">↓</button>
+          <span class="topic-toggle">+</span>
+        </span>
       </summary>
       <div class="topic-category-body">
         ${group.topics.map((t, idx) => {
@@ -3637,6 +3642,8 @@ document.addEventListener('click', e => {
     saveLocal(); renderAll();
   }
   if (moveTopicCategory){
+    e.preventDefault();
+    e.stopPropagation();
     normalizeTopicCategoryPriorityState();
     const currentOrder = [...topicCategoryPriority];
     const idx = currentOrder.findIndex(item => item.toLowerCase() === topicCategoryName.toLowerCase());
