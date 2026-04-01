@@ -2019,6 +2019,37 @@ function populateEventTypeSelect(){
 function renderAdminEventTypes(){
   const box = $('adminEventTypeTable');
   if(!box) return;
+  const list = (eventTypes || []).map((name, idx) => `
+    <div class="admin-list-item">
+      <div class="details-summary-main">
+        <strong>${idx + 1}. ${esc(name)}</strong>
+        <div class="details-summary-meta">
+          <span>Widoczne na ekranie Start</span>
+        </div>
+      </div>
+      <div class="row admin-actions">
+        <button class="ghost" data-edit-event-type="${idx}">Edytuj</button>
+        <button class="ghost danger-lite" data-delete-event-type="${idx}">Usuń</button>
+      </div>
+    </div>
+  `).join('');
+  box.innerHTML = eventTypes?.length ? `
+    <details class="admin-collapsible">
+      <summary>
+        <div class="details-summary-main">
+          <strong>Aktualna lista</strong>
+          <div class="details-summary-meta">
+            <span>${eventTypes.length} ${eventTypes.length === 1 ? 'typ zdarzenia' : 'typów zdarzeń'}</span>
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-collapsible-body">
+        ${list}
+      </div>
+    </details>
+  ` : '<div class="empty-state">Brak typów zdarzeń.</div>';
+  return;
   box.innerHTML = (eventTypes || []).map((name, idx) => `
     <div class="admin-list-item">
       <div><strong>${idx + 1}. ${esc(name)}</strong></div>
@@ -2524,6 +2555,37 @@ function renderAdminAlgorithms(){
 function renderAdminEventTypes(){
   const box = $('adminEventTypeTable');
   if(!box) return;
+  const groupedList = (eventTypes || []).map((name, idx) => `
+    <div class="admin-list-item">
+      <div class="details-summary-main">
+        <strong>${idx + 1}. ${esc(name)}</strong>
+        <div class="details-summary-meta">
+          <span>Widoczne na ekranie Start</span>
+        </div>
+      </div>
+      <div class="row admin-actions">
+        <button class="ghost" data-edit-event-type="${idx}">Edytuj</button>
+        <button class="ghost danger-lite" data-delete-event-type="${idx}">Usuń</button>
+      </div>
+    </div>
+  `).join('');
+  box.innerHTML = eventTypes?.length ? `
+    <details class="admin-collapsible">
+      <summary>
+        <div class="details-summary-main">
+          <strong>Aktualna lista</strong>
+          <div class="details-summary-meta">
+            <span>${eventTypes.length} ${eventTypes.length === 1 ? 'typ zdarzenia' : 'typów zdarzeń'}</span>
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-collapsible-body">
+        ${groupedList}
+      </div>
+    </details>
+  ` : '<div class="empty-state">Brak typów zdarzeń.</div>';
+  return;
   box.innerHTML = (eventTypes || []).map((name, idx) => `
     <details class="admin-collapsible">
       <summary>
@@ -3414,6 +3476,33 @@ document.addEventListener('click', e => {
   const printAlgoId = t.dataset.printAlgo || '';
   if (printAlgoId){
     printAlgorithms(printAlgoId);
+    return;
+  }
+  if (eventTypeIndex != null && t.dataset.editEventType !== undefined){
+    const idx = Number(eventTypeIndex);
+    const item = eventTypes[idx];
+    if(typeof item !== 'string') return;
+    eventTypeEditIndex = idx;
+    if($('adminEventTypeName')) $('adminEventTypeName').value = item;
+    if($('saveEventTypeBtn')) $('saveEventTypeBtn').textContent = 'Zapisz typ zdarzenia';
+    if($('cancelEventTypeEditBtn')) $('cancelEventTypeEditBtn').hidden = false;
+    $('adminEventTypeName')?.focus();
+    $('adminEventTypeName')?.scrollIntoView({ behavior:'smooth', block:'center' });
+    return;
+  }
+  if (eventTypeIndex != null && t.dataset.deleteEventType !== undefined){
+    const idx = Number(eventTypeIndex);
+    if(Number.isNaN(idx) || idx < 0 || idx >= eventTypes.length) return;
+    eventTypes = eventTypes.filter((_, listIdx) => listIdx !== idx);
+    if(eventTypeEditIndex === idx) eventTypeEditIndex = null;
+    else if(eventTypeEditIndex != null && eventTypeEditIndex > idx) eventTypeEditIndex -= 1;
+    if(eventTypeEditIndex == null){
+      if($('adminEventTypeName')) $('adminEventTypeName').value = '';
+      if($('saveEventTypeBtn')) $('saveEventTypeBtn').textContent = 'Dodaj typ zdarzenia';
+      if($('cancelEventTypeEditBtn')) $('cancelEventTypeEditBtn').hidden = true;
+    }
+    saveLocal();
+    renderAll();
     return;
   }
   if (offlineAlgoId){
