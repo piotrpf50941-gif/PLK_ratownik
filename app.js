@@ -1871,8 +1871,11 @@ async function maybeNotifyAppNotice(){
 }
 function setTheme(mode){
   const dark = mode === 'dark';
+  document.documentElement.classList.toggle('night-mode', dark);
   document.body.classList.toggle('night-mode', dark);
   localStorage.setItem(STORAGE_KEYS.theme, dark ? 'dark' : 'light');
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+  if(themeMeta) themeMeta.setAttribute('content', dark ? '#0a1220' : '#0b4fa2');
   const btn = $('nightModeBtn');
   if (btn){
     btn.textContent = dark ? '☀️' : '🌙';
