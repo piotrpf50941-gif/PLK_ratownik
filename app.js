@@ -3132,8 +3132,26 @@ const installBtn = $('installBtn');
 window.addEventListener('beforeinstallprompt', e => { e.preventDefault(); deferredPrompt = e; installBtn.hidden = false; });
 installBtn.onclick = async () => { if(!deferredPrompt) return; deferredPrompt.prompt(); await deferredPrompt.userChoice; deferredPrompt = null; installBtn.hidden = true; };
 if('serviceWorker' in navigator){
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(refreshing) return;
+    refreshing = true;
+    window.location.reload();
+  });
   navigator.serviceWorker.register('./sw.js').then(reg => {
     if(reg && typeof reg.update === 'function') reg.update();
+    if(reg?.waiting){
+      reg.waiting.postMessage({ type:'SKIP_WAITING' });
+    }
+    reg?.addEventListener('updatefound', () => {
+      const nextWorker = reg.installing;
+      if(!nextWorker) return;
+      nextWorker.addEventListener('statechange', () => {
+        if(nextWorker.state === 'installed' && navigator.serviceWorker.controller){
+          nextWorker.postMessage({ type:'SKIP_WAITING' });
+        }
+      });
+    });
   }).catch(() => {});
 }
 fillTopicForm(null);

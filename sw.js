@@ -1,4 +1,4 @@
-const CACHE = 'ratownik-plk-20260330-sync-fix-v6';
+const CACHE = 'ratownik-plk-20260401-night-fix-v7';
 const ASSETS = [
   './','./index.html','./style.css','./app.js','./config.js','./manifest.webmanifest','./assets/logo_plk.jpg','./assets/logo_plk.png','./assets/icon.png','./assets/audio/metronome_rko.wav',
   './assets/topics/sec01.jpg','./assets/topics/sec02.jpg','./assets/topics/sec03.jpg','./assets/topics/sec04.jpg','./assets/topics/sec05.jpg',
@@ -13,6 +13,11 @@ self.addEventListener('activate', event => {
       .then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key))))
       .then(() => self.clients.claim())
   );
+});
+self.addEventListener('message', event => {
+  if(event.data && event.data.type === 'SKIP_WAITING'){
+    self.skipWaiting();
+  }
 });
 self.addEventListener('fetch', event => {
   if(event.request.method !== 'GET') return;
