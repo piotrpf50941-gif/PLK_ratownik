@@ -115,6 +115,7 @@ body.night-mode .algo-card.active{background:#17283d}
 .topic-category-priority-meta{display:grid;gap:3px}
 .topic-category-priority-meta small{color:var(--muted)}
 .topic-category-priority-row .admin-actions button{min-width:48px}
+.admin-topic-category .admin-row{margin-bottom:0}
 #map{height:380px;border-radius:18px;overflow:hidden;border:1px solid var(--line)}
 .note{margin:10px 0 0;color:var(--muted)}
 .empty-state{border:1px dashed var(--line);border-radius:16px;padding:18px;background:var(--surface);color:var(--muted)}

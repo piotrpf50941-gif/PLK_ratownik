@@ -2199,29 +2199,52 @@ function renderTopicCategoryPriorityEditor(){
   }).join('') || '<div class="empty-state">Najpierw dodaj tematy, aby ustawić kolejność kategorii.</div>';
 }
 function renderAdminTopics(){
-  const topicCategoryIndexMap = buildTopicCategoryIndexMap(topics);
-  $('adminTopicTable').innerHTML = topics.map((topic, idx) => {
-    const t = normalizeTopic(topic, idx);
-    const main = t.s.find(sec => sec[0] !== 'warn') || t.s[0];
-    const warn = t.s.find(sec => sec[0] === 'warn');
-    const displayNumber = topicCategoryIndexMap.get(t.id) || t.n;
-    const summaryText = main
-      ? `${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków`
-      : 'opis ogólny • bez sekcji kroków';
-    return `
-    <div class="admin-row topic-admin-row">
-      <div>
-        <strong>${esc(displayNumber)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
-        <small>${esc(t.category || 'Pierwsza pomoc')} • ${summaryText}${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
+  const normalizedTopics = topics.map((topic, idx) => normalizeTopic(topic, idx));
+  const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
+  const grouped = groupTopicsByCategory(normalizedTopics);
+  $('adminTopicTable').innerHTML = grouped.map(group => `
+    <details class="topic-category admin-topic-category">
+      <summary>
+        <span class="topic-category-title">
+          <span class="topic-category-badge">${esc(group.category)}</span>
+          <small>${group.topics.length} ${group.topics.length === 1 ? 'temat' : 'tematów'}</small>
+        </span>
+        <span class="topic-toggle">+</span>
+      </summary>
+      <div class="topic-category-body">
+        ${group.topics.map((t, idx) => {
+          const main = t.s.find(sec => sec[0] !== 'warn') || t.s[0];
+          const warn = t.s.find(sec => sec[0] === 'warn');
+          const displayNumber = topicCategoryIndexMap.get(t.id) || t.n;
+          const summaryText = main
+            ? `${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków`
+            : 'opis ogólny • bez sekcji kroków';
+          return `
+            <div class="admin-row topic-admin-row">
+              <div>
+                <strong>${esc(displayNumber)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
+                <small>${summaryText}${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
+              </div>
+              <div class="row admin-actions">
+                <button class="ghost" data-move-topic="up:${t.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+                <button class="ghost" data-move-topic="down:${t.id}" ${idx === group.topics.length - 1 ? 'disabled' : ''}>↓</button>
+                <button class="ghost" data-edit-topic="${t.id}">Edytuj</button>
+                <button class="ghost danger-lite" data-delete-topic="${t.id}">Usuń</button>
+              </div>
+            </div>
+          `;
+        }).join('')}
       </div>
-      <div class="row admin-actions">
-        <button class="ghost" data-move-topic="up:${t.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
-        <button class="ghost" data-move-topic="down:${t.id}" ${idx === topics.length - 1 ? 'disabled' : ''}>↓</button>
-        <button class="ghost" data-edit-topic="${t.id}">Edytuj</button>
-        <button class="ghost danger-lite" data-delete-topic="${t.id}">Usuń</button>
-      </div>
-    </div>`;
-  }).join('') || '<div class="empty-state">Brak tematów.</div>';
+    </details>
+  `).join('') || '<div class="empty-state">Brak tematów.</div>';
+  const updateTopicToggle = (d) => {
+    const toggle = d.querySelector('summary .topic-toggle');
+    if (toggle) toggle.textContent = d.open ? '–' : '+';
+  };
+  document.querySelectorAll('#adminTopicTable .topic-category').forEach(d => {
+    updateTopicToggle(d);
+    d.addEventListener('toggle', () => updateTopicToggle(d));
+  });
 }
 function renderOfflineAlgorithmPriorityEditor(){
   const box = $('offlineAlgorithmPriorityTable');
@@ -2238,8 +2261,10 @@ function renderOfflineAlgorithmPriorityEditor(){
         <small>${esc(algo.category)} • ${algo.steps.length} kroków</small>
       </div>
       <div class="row admin-actions">
+        <button class="ghost" type="button" data-move-offline-algo="top" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>⇡</button>
         <button class="ghost" type="button" data-move-offline-algo="up" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
         <button class="ghost" type="button" data-move-offline-algo="down" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
+        <button class="ghost" type="button" data-move-offline-algo="bottom" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>⇣</button>
       </div>
     </div>
   `).join('') || '<div class="empty-state">Zaznacz algorytmy na liście poniżej, aby ustawić ich kolejność offline.</div>';
@@ -3037,11 +3062,19 @@ document.addEventListener('click', e => {
   }
   if (moveTopic){
     const [dir, id] = moveTopic.split(':');
-    const idx = topics.findIndex(x => x.id === id);
-    if (idx < 0) return;
-    const newIdx = dir === 'up' ? idx - 1 : idx + 1;
-    if (newIdx < 0 || newIdx >= topics.length) return;
-    [topics[idx], topics[newIdx]] = [topics[newIdx], topics[idx]];
+    const currentIdx = topics.findIndex((topic, idx) => normalizeTopic(topic, idx).id === id);
+    if (currentIdx < 0) return;
+    const currentCategory = normalizeTopic(topics[currentIdx], currentIdx).category;
+    const sameCategoryIndexes = topics
+      .map((topic, idx) => ({ idx, category: normalizeTopic(topic, idx).category }))
+      .filter(item => item.category === currentCategory)
+      .map(item => item.idx);
+    const categoryPos = sameCategoryIndexes.indexOf(currentIdx);
+    if (categoryPos < 0) return;
+    const targetCategoryPos = dir === 'up' ? categoryPos - 1 : categoryPos + 1;
+    if (targetCategoryPos < 0 || targetCategoryPos >= sameCategoryIndexes.length) return;
+    const swapIdx = sameCategoryIndexes[targetCategoryPos];
+    [topics[currentIdx], topics[swapIdx]] = [topics[swapIdx], topics[currentIdx]];
     saveLocal(); renderAll();
   }
   if (moveTopicCategory){
@@ -3060,6 +3093,20 @@ document.addEventListener('click', e => {
     normalizeOfflineAlgorithmIds();
     const idx = offlineAlgorithmIds.findIndex(id => id === offlineAlgoIdToMove);
     if (idx < 0) return;
+    if (moveOfflineAlgo === 'top'){
+      const [item] = offlineAlgorithmIds.splice(idx, 1);
+      offlineAlgorithmIds.unshift(item);
+      saveLocal();
+      renderAll();
+      return;
+    }
+    if (moveOfflineAlgo === 'bottom'){
+      const [item] = offlineAlgorithmIds.splice(idx, 1);
+      offlineAlgorithmIds.push(item);
+      saveLocal();
+      renderAll();
+      return;
+    }
     const newIdx = moveOfflineAlgo === 'up' ? idx - 1 : idx + 1;
     if (newIdx < 0 || newIdx >= offlineAlgorithmIds.length) return;
     [offlineAlgorithmIds[idx], offlineAlgorithmIds[newIdx]] = [offlineAlgorithmIds[newIdx], offlineAlgorithmIds[idx]];
