@@ -167,7 +167,7 @@
       <section class="card">
         <div class="card-head wrap-mobile">
           <h3>Apteczki</h3>
-          <div class="row wrap-mobile"><input id="kitSearch" class="search-input wide" placeholder="Szukaj apteczki po lokalizacji lub zawartości, np. zakład, hala, RKO, opatrunek"><select id="kitTypeFilter" class="search-input compact"></select><select id="kitCategoryFilter" class="search-input compact"></select></div>
+          <div class="row wrap-mobile kit-search-row"><input id="kitSearch" class="search-input wide" placeholder="Szukaj apteczki po lokalizacji lub zawartości, np. zakład, hala, RKO, opatrunek"><select id="kitTypeFilter" class="search-input compact"></select><select id="kitCategoryFilter" class="search-input compact"></select></div>
         </div>
         <div id="kitList"></div>
       </section>
@@ -314,7 +314,7 @@ assets/topics/sec04.jpg"></textarea></label>
               <input type="color" data-format-color value="#d92c2c">
             </div>
             <label><span>Kolor pola Wstęp / opis</span><input id="topicLeadColor" type="color" value="#2a6dd9"></label>
-            <label><span>Nagłówek sekcji kroków</span><textarea id="topicIntro" rows="2" placeholder="np. Postępowanie"></textarea></label>
+            <label><span>Nagłówek sekcji kroków (opcjonalnie)</span><textarea id="topicIntro" rows="2" placeholder="np. Postępowanie"></textarea></label>
             <div class="rich-toolbar" data-target="topicIntro">
               <button type="button" class="ghost" data-format="bold">B</button>
               <button type="button" class="ghost" data-format="sizeUp">A+</button>
@@ -322,7 +322,7 @@ assets/topics/sec04.jpg"></textarea></label>
               <input type="color" data-format-color value="#d92c2c">
             </div>
             <label><span>Kolor sekcji kroków</span><input id="topicStepsColor" type="color" value="#1f8f4d"></label>
-            <label><span>Kroki (każdy w nowej linii)</span><textarea id="topicSteps" rows="7" placeholder="Każdy krok wpisz w nowej linii"></textarea></label>
+            <label><span>Kroki (każdy w nowej linii, opcjonalnie)</span><textarea id="topicSteps" rows="7" placeholder="Każdy krok wpisz w nowej linii"></textarea></label>
             <label><span>Czerwone pole – nagłówek</span><textarea id="topicWarnTitle" rows="2" placeholder="np. Ważne"></textarea></label>
             <div class="rich-toolbar" data-target="topicWarnTitle">
               <button type="button" class="ghost" data-format="bold">B</button>
@@ -356,7 +356,7 @@ assets/topics/sec04.jpg"></textarea></label>
                 <h4>Kolejność kategorii</h4>
                 <button class="ghost" id="resetTopicCategoryPriorityBtn" type="button">Reset</button>
               </div>
-              <p class="note"><code>Pierwsza pomoc</code> jest przypięta na początku. Pozostałe kategorie możesz ustawić zgodnie z własną hierarchią ważności.</p>
+              <p class="note">Ustaw kolejność kategorii zgodnie z własną hierarchią ważności. Pierwsza na liście będzie pokazywana jako najważniejsza.</p>
               <div id="topicCategoryPriorityTable" class="topic-category-priority-table"></div>
             </div>
             <div id="adminTopicTable"></div>
@@ -394,6 +394,14 @@ assets/topics/sec04.jpg"></textarea></label>
           </div>
           <div>
             <h3>Lista algorytmów</h3>
+            <div class="topic-category-priority-card">
+              <div class="card-head wrap-mobile topic-priority-head">
+                <h4>Kolejność w trybie offline</h4>
+                <button class="ghost" id="resetOfflineAlgorithmOrderBtn" type="button">Reset</button>
+              </div>
+              <p class="note">Tu ustawiasz ważność tylko algorytmów zaznaczonych do trybu offline.</p>
+              <div id="offlineAlgorithmPriorityTable" class="topic-category-priority-table"></div>
+            </div>
             <div id="adminAlgorithmTable"></div>
           </div>
         </div>

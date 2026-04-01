@@ -1176,8 +1176,11 @@ function renderOfflineSummary(){
   const boxes = [$('offlineSummaryInline'), $('offlineSummaryModal'), $('offlineSummary')].filter(Boolean);
   if(!boxes.length) return;
   normalizeOfflineAlgorithmIds();
-  const essentials = offlineAlgorithmIds.map(id => getAlgorithmById(id)).filter(Boolean).map((algo, idx) => normalizeAlgorithm(algo, idx));
-  const html = `<div class="offline-grid"><div class="offline-card"><h3>Numery alarmowe</h3><div class="panic-grid"><button class="hero danger hero-small" onclick="location.href='tel:112'">112</button><button class="hero amber hero-small" onclick="location.href='tel:999'">999</button></div><p class="note">Działa także offline jako skróty telefonu systemowego.</p></div><div class="offline-card"><h3>Najważniejsze algorytmy</h3>${essentials.length ? essentials.map(a => `<details><summary>${esc(a.icon)} ${esc(a.title)}</summary><ol>${a.steps.slice(0,4).map(step => `<li>${esc(step)}</li>`).join('')}</ol></details>`).join('') : '<p class="note">Brak wybranych algorytmów offline. Ustaw je w panelu administratora.</p>'}</div></div>`;
+  const essentials = offlineAlgorithmIds
+    .map(id => getAlgorithmById(id))
+    .filter(Boolean)
+    .map((algo, idx) => normalizeAlgorithm(algo, idx));
+  const html = `<div class="offline-grid"><div class="offline-card"><h3>Numery alarmowe</h3><div class="panic-grid"><button class="hero danger hero-small" onclick="location.href='tel:112'">112</button><button class="hero amber hero-small" onclick="location.href='tel:999'">999</button></div><p class="note">Działa także offline jako skróty telefonu systemowego.</p></div><div class="offline-card"><h3>Najważniejsze algorytmy</h3>${essentials.length ? essentials.map(a => `<details><summary>${esc(a.icon)} ${esc(a.title)}</summary><ol>${a.steps.map(step => `<li>${esc(step)}</li>`).join('')}</ol></details>`).join('') : '<p class="note">Brak wybranych algorytmów offline. Ustaw je w panelu administratora.</p>'}</div></div>`;
   boxes.forEach(box => box.innerHTML = html);
 }
 
@@ -1468,14 +1471,18 @@ function normalizeTopicCategoryPriorityList(list, items=topics){
     seen.add(key);
     result.push(label);
   };
-  add('Pierwsza pomoc');
-  (Array.isArray(list) ? list : []).forEach(add);
+  const seed = Array.isArray(list) && list.length ? list : DEFAULT_TOPIC_CATEGORY_PRIORITY;
+  seed.forEach(add);
   DEFAULT_TOPIC_CATEGORY_PRIORITY.forEach(add);
   (Array.isArray(items) ? items : []).forEach(topic => add(normalizeTopicCategory(topic?.category, topic)));
   return result;
 }
 function normalizeTopicCategoryPriorityState(items=topics){
   topicCategoryPriority = normalizeTopicCategoryPriorityList(topicCategoryPriority, items);
+}
+function getDefaultTopicCategorySelection(items=topics){
+  const priority = normalizeTopicCategoryPriorityList(topicCategoryPriority, items);
+  return priority[0] || DEFAULT_TOPIC_CATEGORY_PRIORITY[0] || 'Pierwsza pomoc';
 }
 function getTopicCategoryPriority(category, items=topics){
   const normalized = normalizeTopicCategory(category).toLowerCase();
@@ -1582,27 +1589,48 @@ function openMasterPanel(){
   fillMasterAppSettings();
 }
 function closeMasterPanel(){ if($('masterModal')) $('masterModal').hidden = true; }
+function isAutoTopicPlaceholderText(value=''){
+  const normalized = String(value || '').trim().toLowerCase();
+  return [
+    'uzupełnij kroki postępowania.',
+    'uzupełnij treść tematu.',
+    'uzupełnij informację ostrzegawczą.'
+  ].includes(normalized);
+}
+function isAutoTopicPlaceholderSection(section){
+  const type = String(section?.[0] || '').trim().toLowerCase();
+  const title = String(section?.[1] || '').trim().toLowerCase();
+  const items = Array.isArray(section?.[2]) ? section[2].map(item => String(item || '').trim()).filter(Boolean) : [];
+  if(items.length !== 1 || !isAutoTopicPlaceholderText(items[0])) return false;
+  if(type === 'ok') return !title || title === 'postępowanie';
+  if(type === 'warn') return !title || title === 'ważne';
+  return false;
+}
 function normalizeSection(sec, fallbackType='ok'){
+  if(sec == null) return null;
   if (Array.isArray(sec)) {
     const type = sec[0] || fallbackType;
     const title = sec[1] || 'Postępowanie';
     const raw = sec[2];
     const items = Array.isArray(raw) ? raw.map(x => String(x ?? '').trim()).filter(Boolean) : (String(raw ?? '').trim() ? [String(raw).trim()] : []);
-    return [type, title, items.length ? items : ['Brak treści.']];
+    return items.length ? [type, title, items] : null;
   }
   if (sec && typeof sec === 'object') {
     const type = sec.type || sec.kind || fallbackType;
     const title = sec.title || sec.header || 'Postępowanie';
     const raw = sec.content ?? sec.items ?? sec.text;
     const items = Array.isArray(raw) ? raw.map(x => String(x ?? '').trim()).filter(Boolean) : (String(raw ?? '').trim() ? [String(raw).trim()] : []);
-    return [type, title, items.length ? items : ['Brak treści.']];
+    return items.length ? [type, title, items] : null;
   }
   const text = String(sec ?? '').trim();
-  return [fallbackType, fallbackType === 'warn' ? 'Ważne' : 'Postępowanie', text ? [text] : ['Brak treści.']];
+  return text ? [fallbackType, fallbackType === 'warn' ? 'Ważne' : 'Postępowanie', [text]] : null;
 }
 function normalizeTopic(topic, idx=0){
   const sectionsRaw = Array.isArray(topic?.s) ? topic.s : (Array.isArray(topic?.sections) ? topic.sections : []);
-  const sections = sectionsRaw.map((sec, i) => normalizeSection(sec, i === 0 ? 'ok' : 'warn'));
+  const sections = sectionsRaw
+    .map((sec, i) => normalizeSection(sec, i === 0 ? 'ok' : 'warn'))
+    .filter(sec => Array.isArray(sec?.[2]) && sec[2].length)
+    .filter(sec => !isAutoTopicPlaceholderSection(sec));
   const imageCandidates = Array.isArray(topic?.images) ? topic.images : [topic?.img || topic?.image].filter(Boolean);
   const images = imageCandidates.map(x => String(x||'').trim()).filter(Boolean).slice(0,4);
   return {
@@ -1620,7 +1648,7 @@ function normalizeTopic(topic, idx=0){
     warnColor: topic?.warnColor || '#c63b3b',
     notesColor: topic?.notesColor || '#0b4fa2',
     relatedAlgorithmIds: Array.isArray(topic?.relatedAlgorithmIds) ? topic.relatedAlgorithmIds.filter(Boolean) : [],
-    s: sections.length ? sections : [['ok','Postępowanie',['Uzupełnij treść tematu.']]]
+    s: sections
   };
 }
 function normalizeAlgorithm(algo, idx=0){
@@ -1900,8 +1928,9 @@ function normalizeTopicSectionsFromForm(){
   const warnTitle = $('topicWarnTitle')?.value.trim();
   const warnLines = ($('topicWarnSteps')?.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
   const notesLines = ($('topicNotes')?.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-  const sections = [['ok', intro || 'Postępowanie', lines.length ? lines : ['Uzupełnij kroki postępowania.']]];
-  if (warnTitle || warnLines.length) sections.push(['warn', warnTitle || 'Ważne', warnLines.length ? warnLines : ['Uzupełnij informację ostrzegawczą.']]);
+  const sections = [];
+  if (lines.length) sections.push(['ok', intro || 'Postępowanie', lines]);
+  if (warnLines.length) sections.push(['warn', warnTitle || 'Ważne', warnLines]);
   if (notesLines.length) sections.push(['notes', 'Dodatkowe notatki', notesLines]);
   return sections;
 }
@@ -1910,7 +1939,7 @@ function fillTopicForm(topic){
   currentTopicEditId = normalized?.id || null;
   $('topicFormTitle').textContent = normalized ? 'Edytuj temat' : 'Dodaj temat';
   $('topicTitle').value = normalized?.t || '';
-  if ($('topicCategory')) $('topicCategory').value = normalized?.category || 'Pierwsza pomoc';
+  if ($('topicCategory')) $('topicCategory').value = normalized?.category || getDefaultTopicCategorySelection();
   $('topicIcon').value = normalized?.icon || '🩺';
   $('topicImage').value = Array.isArray(normalized?.images) && normalized.images.length ? normalized.images.join('\n') : (normalized?.img || '');
   if ($('topicLeadTitle')) $('topicLeadTitle').value = normalized?.leadTitle || 'Wstęp';
@@ -1921,7 +1950,7 @@ function fillTopicForm(topic){
   if ($('topicNotesColor')) $('topicNotesColor').value = normalized?.notesColor || defaultTopicColors.notes;
   const main = normalized?.s?.find(sec => sec[0] !== 'warn' && sec[0] !== 'notes') || normalized?.s?.[0];
   const warn = normalized?.s?.find(sec => sec[0] === 'warn');
-  $('topicIntro').value = main?.[1] || 'Postępowanie';
+  $('topicIntro').value = main?.[1] || '';
   $('topicSteps').value = Array.isArray(main?.[2]) ? main[2].join('\n') : (main?.[2] || '');
   if ($('topicWarnTitle')) $('topicWarnTitle').value = warn?.[1] || '';
   if ($('topicWarnSteps')) $('topicWarnSteps').value = Array.isArray(warn?.[2]) ? warn[2].join('\n') : (warn?.[2] || '');
@@ -1945,6 +1974,17 @@ function fillAlgorithmForm(algo){
 }
 function renderTopicCard(topic, displayNumber=null){
   const t = normalizeTopic(topic);
+  const sectionHtml = (t.s || []).map(sec => {
+    const color = sec[0] === 'warn'
+      ? (t.warnColor || defaultTopicColors.warn)
+      : sec[0] === 'notes'
+        ? (t.notesColor || defaultTopicColors.notes)
+        : (t.stepsColor || defaultTopicColors.steps);
+    return `<section class="block ${esc(sec[0] || 'ok')}" ${panelStyle(color, sec[0] === 'warn' ? 0.14 : 0.11)}><h4 class="rich-text">${sanitizeRichText(sec[1] || 'Postępowanie')}</h4>${renderSectionContent(sec[2])}</section>`;
+  }).join('');
+  const relatedHtml = Array.isArray(t.relatedAlgorithmIds) && t.relatedAlgorithmIds.length
+    ? `<div class="related-algos">${t.relatedAlgorithmIds.map(id => { const algo = getAlgorithmById(id); return algo ? `<button class="ghost" data-open-related-algo="${esc(id)}">${esc(algo.icon || '🧭')} ${esc(algo.title)}</button>` : ''; }).join('')}</div>`
+    : '';
   return `
     <details class="topic">
       <summary>
@@ -1956,10 +1996,7 @@ function renderTopicCard(topic, displayNumber=null){
           ${t.lead ? `<section class="topic-lead-card" ${panelStyle(t.leadColor || defaultTopicColors.lead, 0.12)}><h4>${sanitizeRichText(t.leadTitle || 'Wstęp')}</h4><div class="rich-text">${sanitizeRichText(t.lead)}</div></section>` : `<section class="topic-lead-card empty" ${panelStyle(t.leadColor || defaultTopicColors.lead, 0.08)}><h4>${sanitizeRichText(t.leadTitle || 'Wstęp')}</h4><p>Brak opisu wstępnego dla tego tematu.</p></section>`}
         </div>
         ${(t.images || [t.img]).length ? `<div class="topic-gallery cols-${Math.min(Math.max((t.images || [t.img]).length,1),4)}">${(t.images || [t.img]).slice(0,4).map(src => `<img src="${esc(src || 'assets/topics/sec01.jpg')}" alt="${esc(t.t)}">`).join('')}</div>` : ''}
-        <div class="blocks topic-wide-blocks">
-          ${(t.s || []).map(sec => { const color = sec[0] === 'warn' ? (t.warnColor || defaultTopicColors.warn) : sec[0] === 'notes' ? (t.notesColor || defaultTopicColors.notes) : (t.stepsColor || defaultTopicColors.steps); return `<section class="block ${esc(sec[0] || 'ok')}" ${panelStyle(color, sec[0] === 'warn' ? 0.14 : 0.11)}><h4 class="rich-text">${sanitizeRichText(sec[1] || 'Postępowanie')}</h4>${renderSectionContent(sec[2])}</section>`; }).join('')}
-          ${Array.isArray(t.relatedAlgorithmIds) && t.relatedAlgorithmIds.length ? `<div class="related-algos">${t.relatedAlgorithmIds.map(id => { const algo = getAlgorithmById(id); return algo ? `<button class="ghost" data-open-related-algo="${esc(id)}">${esc(algo.icon || '🧭')} ${esc(algo.title)}</button>` : ''; }).join('')}</div>` : ''}
-        </div>
+        ${sectionHtml || relatedHtml ? `<div class="blocks topic-wide-blocks">${sectionHtml}${relatedHtml}</div>` : ''}
       </div>
     </details>
   `;
@@ -1969,7 +2006,7 @@ function renderTopics(query=''){
   renumberTopics();
   const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
-  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
+  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, t.leadTitle, t.lead, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
   const grouped = groupTopicsByCategory(filtered);
   $('topics').innerHTML = grouped.map(group => `
     <details class="topic-category" ${q ? 'open' : ''}>
@@ -2145,14 +2182,13 @@ function renderTopicCategoryPriorityEditor(){
   box.innerHTML = categories.map((category, idx) => {
     const count = counts.get(category) || 0;
     const topicLabel = count === 1 ? 'temat' : 'tematów';
-    const isPinned = idx === 0 && String(category).toLowerCase() === 'pierwsza pomoc';
-    const disableUp = isPinned || idx <= 1;
-    const disableDown = isPinned || idx === categories.length - 1;
+    const disableUp = idx === 0;
+    const disableDown = idx === categories.length - 1;
     return `
       <div class="admin-row topic-category-priority-row">
         <div class="topic-category-priority-meta">
           <strong>${idx + 1}. ${esc(category)}</strong>
-          <small>${count} ${topicLabel}${isPinned ? ' • kategoria priorytetowa' : ''}</small>
+          <small>${count} ${topicLabel}</small>
         </div>
         <div class="row admin-actions">
           <button class="ghost" type="button" data-move-topic-category="up" data-topic-category-name="${esc(category)}" ${disableUp ? 'disabled' : ''}>↑</button>
@@ -2169,11 +2205,14 @@ function renderAdminTopics(){
     const main = t.s.find(sec => sec[0] !== 'warn') || t.s[0];
     const warn = t.s.find(sec => sec[0] === 'warn');
     const displayNumber = topicCategoryIndexMap.get(t.id) || t.n;
+    const summaryText = main
+      ? `${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków`
+      : 'opis ogólny • bez sekcji kroków';
     return `
     <div class="admin-row topic-admin-row">
       <div>
         <strong>${esc(displayNumber)}. ${esc(t.icon || '🩺')} ${esc(t.t)}</strong>
-        <small>${esc(t.category || 'Pierwsza pomoc')} • ${esc(String(main?.[1] || 'Postępowanie').replace(/\[[^\]]+\]/g,''))} • ${Array.isArray(main?.[2]) ? main[2].length : 1} kroków${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
+        <small>${esc(t.category || 'Pierwsza pomoc')} • ${summaryText}${warn ? ' • pole ostrzegawcze' : ''}${t.relatedAlgorithmIds?.length ? ' • powiązane algorytmy: ' + t.relatedAlgorithmIds.length : ''}</small>
       </div>
       <div class="row admin-actions">
         <button class="ghost" data-move-topic="up:${t.id}" ${idx === 0 ? 'disabled' : ''}>↑</button>
@@ -2183,6 +2222,27 @@ function renderAdminTopics(){
       </div>
     </div>`;
   }).join('') || '<div class="empty-state">Brak tematów.</div>';
+}
+function renderOfflineAlgorithmPriorityEditor(){
+  const box = $('offlineAlgorithmPriorityTable');
+  if(!box) return;
+  normalizeOfflineAlgorithmIds();
+  const list = offlineAlgorithmIds
+    .map(id => algorithms.find((algo, idx) => normalizeAlgorithm(algo, idx).id === id))
+    .filter(Boolean)
+    .map((algo, idx) => normalizeAlgorithm(algo, idx));
+  box.innerHTML = list.map((algo, idx) => `
+    <div class="admin-row topic-category-priority-row">
+      <div class="topic-category-priority-meta">
+        <strong>${idx + 1}. ${esc(algo.icon)} ${esc(algo.title)}</strong>
+        <small>${esc(algo.category)} • ${algo.steps.length} kroków</small>
+      </div>
+      <div class="row admin-actions">
+        <button class="ghost" type="button" data-move-offline-algo="up" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+        <button class="ghost" type="button" data-move-offline-algo="down" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
+      </div>
+    </div>
+  `).join('') || '<div class="empty-state">Zaznacz algorytmy na liście poniżej, aby ustawić ich kolejność offline.</div>';
 }
 function renderAdminAlgorithms(){
   $('adminAlgorithmTable').innerHTML = algorithms.map((algo, idx) => {
@@ -2223,6 +2283,7 @@ normalizeAppInfo();
   renderKits($('kitSearch')?.value || '');
   renderTopicCategoryPriorityEditor();
   renderAdminTopics();
+  renderOfflineAlgorithmPriorityEditor();
   renderAdminAlgorithms();
   renderAdminEventTypes();
   renderTopicAlgorithmPicker();
@@ -2794,7 +2855,7 @@ $('saveTopicBtn').onclick = () => {
   const item = {
     id: currentTopicEditId || 't'+Date.now(),
     n: topics.length + 1,
-    category: $('topicCategory')?.value.trim() || 'Pierwsza pomoc',
+    category: $('topicCategory')?.value.trim() || getDefaultTopicCategorySelection(),
     icon: $('topicIcon').value.trim() || '🩺',
     t: title,
     images: ($('topicImage').value || '').split(/\r?\n|,/).map(x => x.trim()).filter(Boolean).slice(0,4),
@@ -2848,6 +2909,14 @@ if($('resetTopicCategoryPriorityBtn')) $('resetTopicCategoryPriorityBtn').onclic
   saveLocal();
   renderAll();
 };
+if($('resetOfflineAlgorithmOrderBtn')) $('resetOfflineAlgorithmOrderBtn').onclick = () => {
+  const selected = new Set(offlineAlgorithmIds);
+  offlineAlgorithmIds = algorithms
+    .map((algo, idx) => normalizeAlgorithm(algo, idx).id)
+    .filter(id => selected.has(id));
+  saveLocal();
+  renderAll();
+};
 $('resetLocalBtn').onclick = () => {
   if(!confirm('Przywrócić domyślne dane lokalne?')) return;
   localStorage.removeItem(STORAGE_KEYS.rescuers);
@@ -2869,7 +2938,7 @@ $('resetLocalBtn').onclick = () => {
   alert('Przywrócono dane domyślne.');
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-move-topic-category],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type]') || e.target;
+  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-move-topic-category],[data-move-offline-algo],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type]') || e.target;
   const rescuerId = t.dataset.editRescuer || t.dataset.deleteRescuer;
   const aedId = t.dataset.editAed || t.dataset.deleteAed;
   const kitId = t.dataset.editKit || t.dataset.deleteKit;
@@ -2877,6 +2946,8 @@ document.addEventListener('click', e => {
   const moveTopic = t.dataset.moveTopic;
   const moveTopicCategory = t.dataset.moveTopicCategory;
   const topicCategoryName = t.dataset.topicCategoryName || '';
+  const moveOfflineAlgo = t.dataset.moveOfflineAlgo;
+  const offlineAlgoIdToMove = t.dataset.offlineAlgoId || '';
   const algoId = t.dataset.selectAlgo;
   const adminAlgorithmId = t.dataset.editAlgorithm || t.dataset.deleteAlgorithm;
   const relatedAlgoId = t.dataset.openRelatedAlgo;
@@ -2890,6 +2961,7 @@ document.addEventListener('click', e => {
     }
     saveLocal();
     renderOfflineSummary();
+    renderOfflineAlgorithmPriorityEditor();
     renderAdminAlgorithms();
   }
   if (relatedAlgoId){
@@ -2976,11 +3048,21 @@ document.addEventListener('click', e => {
     normalizeTopicCategoryPriorityState();
     const currentOrder = [...topicCategoryPriority];
     const idx = currentOrder.findIndex(item => item.toLowerCase() === topicCategoryName.toLowerCase());
-    if (idx < 0 || idx === 0) return;
+    if (idx < 0) return;
     const newIdx = moveTopicCategory === 'up' ? idx - 1 : idx + 1;
-    if (newIdx <= 0 || newIdx >= currentOrder.length) return;
+    if (newIdx < 0 || newIdx >= currentOrder.length) return;
     [currentOrder[idx], currentOrder[newIdx]] = [currentOrder[newIdx], currentOrder[idx]];
     topicCategoryPriority = normalizeTopicCategoryPriorityList(currentOrder, topics);
+    saveLocal();
+    renderAll();
+  }
+  if (moveOfflineAlgo){
+    normalizeOfflineAlgorithmIds();
+    const idx = offlineAlgorithmIds.findIndex(id => id === offlineAlgoIdToMove);
+    if (idx < 0) return;
+    const newIdx = moveOfflineAlgo === 'up' ? idx - 1 : idx + 1;
+    if (newIdx < 0 || newIdx >= offlineAlgorithmIds.length) return;
+    [offlineAlgorithmIds[idx], offlineAlgorithmIds[newIdx]] = [offlineAlgorithmIds[newIdx], offlineAlgorithmIds[idx]];
     saveLocal();
     renderAll();
   }

@@ -162,6 +162,9 @@ body.night-mode button.ghost.danger-lite{background:#38191d;color:#ffd8dd}
 }
 
 .search-input.compact{max-width:240px}.wrap-mobile{flex-wrap:wrap}.selectable-person{border-left:4px solid #0b4fa2}.selectable-head{display:flex;align-items:center;gap:8px}.kit-tags{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0}.badge.small{font-size:12px;padding:4px 8px}select.search-input{appearance:auto}.topbar .brand h1{font-size:clamp(18px,2.4vw,26px)}
+.kit-search-row{width:100%;justify-content:flex-end}
+#kitSearch{flex:1 1 360px;min-width:320px;max-width:none}
+#kitTypeFilter,#kitCategoryFilter{flex:0 1 220px;max-width:220px}
 
 
 .topic-lead-card{background:#eef6ff;border:1px solid #cfe3ff;border-left:5px solid #2a6dd9;border-radius:16px;padding:14px 16px;margin:14px 0 18px;box-shadow:0 8px 20px rgba(23,64,128,.08)}
@@ -299,4 +302,6 @@ body.night-mode .topbar-actions .tech-btn{background:#1a2940;color:#dbe9ff}
 @media (max-width:640px){
   .row.topbar-actions{gap:6px}
   .icon-btn{width:38px;height:38px;font-size:1rem}
+  #kitSearch{min-width:0}
+  .kit-search-row > *{width:100%;max-width:none}
 }
