@@ -44,6 +44,8 @@ create table if not exists public.topics (
   "stepsColor" text,
   "warnColor" text,
   "notesColor" text,
+  "externalLink" text,
+  "externalLinkLabel" text,
   s jsonb default '[]'::jsonb,
   "relatedAlgorithmIds" text[] default '{}'
 );
@@ -93,6 +95,8 @@ alter table public.topics add column if not exists "leadColor" text;
 alter table public.topics add column if not exists "stepsColor" text;
 alter table public.topics add column if not exists "warnColor" text;
 alter table public.topics add column if not exists "notesColor" text;
+alter table public.topics add column if not exists "externalLink" text;
+alter table public.topics add column if not exists "externalLinkLabel" text;
 alter table public.topics add column if not exists s jsonb default '[]'::jsonb;
 alter table public.topics add column if not exists "relatedAlgorithmIds" text[] default '{}';
 

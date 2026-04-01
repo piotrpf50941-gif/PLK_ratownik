@@ -96,9 +96,12 @@
       <section class="card">
         <div class="card-head wrap-mobile">
           <h2>Szybkie tematy</h2>
-          <div class="row">
+          <div class="row wrap-mobile">
             <button class="ghost" id="startMetronomeBtn">Metronom 110/min</button>
+            <button class="ghost" id="startAssessmentTimerBtn">Timer 3 + 10 s</button>
+            <button class="ghost" id="stopAssessmentTimerBtn">Reset timera</button>
             <button class="ghost" id="stopMetronomeBtn">Stop</button>
+            <span id="assessmentTimerBadge" class="badge" hidden>Timer gotowy</span>
           </div>
         </div>
         <div class="search-row">
@@ -114,6 +117,7 @@
         <div class="card-head wrap-mobile">
           <h2>Tryb krokowy</h2>
           <div class="row wrap-mobile card-head-actions">
+            <button class="ghost" id="printCurrentAlgorithmStepperBtn">Drukuj ten algorytm</button>
             <button class="ghost" id="printAlgorithmsStepperBtn">Drukuj / PDF</button>
             <span id="algoCountBadge" class="badge">Algorytm 0 z 0</span>
             <span id="algoProgressBadge" class="badge">Wybierz algorytm</span>
@@ -167,7 +171,7 @@
       <section class="card">
         <div class="card-head wrap-mobile">
           <h3>Apteczki</h3>
-          <div class="row wrap-mobile kit-search-row"><input id="kitSearch" class="search-input wide" placeholder="Szukaj apteczki po lokalizacji lub zawartości, np. zakład, hala, RKO, opatrunek"><select id="kitTypeFilter" class="search-input compact"></select><select id="kitCategoryFilter" class="search-input compact"></select></div>
+          <div class="row wrap-mobile kit-search-row"><input id="kitSearch" class="search-input wide" placeholder="Szukaj apteczki po lokalizacji lub zawartości, np. zakład, hala, RKO, opatrunek"><select id="kitZoneFilter" class="search-input compact"></select><select id="kitTypeFilter" class="search-input compact"></select><select id="kitCategoryFilter" class="search-input compact"></select></div>
         </div>
         <div id="kitList"></div>
       </section>
@@ -307,6 +311,8 @@ igła i-gel | 4 | 1 | 2027-12-31"></textarea></label>
 assets/topics/sec04.jpg"></textarea></label>
             <label><span>Nagłówek wstępu</span><input id="topicLeadTitle" placeholder="np. Wstęp, Na co zwrócić uwagę, Wprowadzenie"></label>
             <label><span>Wstęp / opis</span><textarea id="topicLead" rows="5" placeholder="Informacje wstępne / opis tematu widoczny obok grafiki"></textarea></label>
+            <label><span>Link zewnętrzny (opcjonalnie)</span><input id="topicExternalLink" type="url" placeholder="np. https://www.youtube.com/watch?v=..."></label>
+            <label><span>Tekst przycisku linku (opcjonalnie)</span><input id="topicExternalLinkLabel" placeholder="np. Otwórz film lub Więcej informacji"></label>
             <div class="rich-toolbar" data-target="topicLead">
               <button type="button" class="ghost" data-format="bold">B</button>
               <button type="button" class="ghost" data-format="sizeUp">A+</button>
@@ -347,7 +353,7 @@ assets/topics/sec04.jpg"></textarea></label>
               <input id="importTopicsCsv" type="file" accept=".csv,text/csv" hidden>
               <button class="ghost" id="cancelTopicEditBtn" hidden>Anuluj edycję</button>
             </div>
-            <p class="note">CSV tematów: id;n;category;icon;title;img;lead;sections. Pole sections wpisz np.: ok :: Rozpoznanie miejsca zdarzenia :: Krok 1 | Krok 2 || warn :: Ważne :: Ostrzeżenie 1</p>
+            <p class="note">CSV tematów: id;n;category;icon;title;img;lead;link;linkLabel;sections. Pole sections wpisz np.: ok :: Rozpoznanie miejsca zdarzenia :: Krok 1 | Krok 2 || warn :: Ważne :: Ostrzeżenie 1</p>
           </div>
           <div>
             <h3>Lista tematów</h3>

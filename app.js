@@ -191,6 +191,7 @@ let currentTopicEditId = null;
 let currentAlgorithmId = algorithms[0]?.id || null;
 let currentAlgorithmStep = 0;
 let rescuerEditId = null, aedEditId = null, kitEditId = null, algorithmEditId = null;
+let kitZoneFilterTouched = false;
 sanitizeState();
 normalizeOfflineAlgorithmIds();
 normalizeAppInfo();
@@ -415,6 +416,8 @@ function serializeRowForOnline(table, row, idx=0){
       stepsColor: item.stepsColor,
       warnColor: item.warnColor,
       notesColor: item.notesColor,
+      externalLink: item.externalLink,
+      externalLinkLabel: item.externalLinkLabel,
       s: Array.isArray(item.s) ? item.s : [],
       relatedAlgorithmIds: Array.isArray(item.relatedAlgorithmIds) ? item.relatedAlgorithmIds : []
     };
@@ -713,6 +716,57 @@ function normalizeKit(kit, idx=0){
   const items = rawItems.map(normalizeKitItem).filter(x => x.name);
   return { id: kit?.id || `k${Date.now()}_${idx}`, name: kit?.name || 'Apteczka', type: kit?.type || 'zakładowa', location: kit?.location || '', categories: Array.isArray(kit?.categories) ? kit.categories : [], items: items.length ? items : [{name:'brak opisu zawartości', size:'', qty:'', expiry:''}] };
 }
+function inferKitZone(value=''){
+  const txt = String(value || '').trim();
+  if(!txt) return '';
+  return txt.split(/[,;|]/).map(part => part.trim()).find(Boolean) || '';
+}
+function normalizeKit(kit, idx=0){
+  const rawItems = Array.isArray(kit?.items) ? kit.items : Array.isArray(kit?.contents) ? kit.contents : [];
+  const items = rawItems.map(normalizeKitItem).filter(x => x.name);
+  const location = String(kit?.location || '').trim();
+  const zone = String(kit?.zone || kit?.zaklad || kit?.plant || inferKitZone(location)).trim();
+  return {
+    id: kit?.id || `k${Date.now()}_${idx}`,
+    name: kit?.name || 'Apteczka',
+    type: kit?.type || 'zakĹ‚adowa',
+    location,
+    zone,
+    categories: Array.isArray(kit?.categories) ? kit.categories : [],
+    items: items.length ? items : [{name:'brak opisu zawartoĹ›ci', size:'', qty:'', expiry:''}]
+  };
+}
+function getKitZone(kit){
+  return String(normalizeKit(kit).zone || '').trim();
+}
+function normalizeExternalLink(value=''){
+  const txt = String(value || '').trim();
+  if(!txt) return '';
+  if(/^https?:\/\//i.test(txt)) return txt;
+  if(/^www\./i.test(txt)) return `https://${txt}`;
+  return txt;
+}
+function isExternalLinkValid(value=''){
+  const txt = normalizeExternalLink(value);
+  if(!txt) return false;
+  try{
+    const parsed = new URL(txt);
+    return ['http:','https:'].includes(parsed.protocol);
+  }catch(_){
+    return false;
+  }
+}
+function getExternalLinkLabel(url='', label=''){
+  const explicit = String(label || '').trim();
+  if(explicit) return explicit;
+  try{
+    const parsed = new URL(normalizeExternalLink(url));
+    const host = parsed.hostname.replace(/^www\./i, '');
+    return host ? `Otwórz: ${host}` : 'Otwórz link';
+  }catch(_){
+    return 'Otwórz link';
+  }
+}
 function detectCsvDelimiter(text){
   const sample = String(text || '').replace(/^\uFEFF/, '').split(/\r?\n/, 1)[0] || '';
   const semicolons = (sample.match(/;/g) || []).length;
@@ -980,6 +1034,8 @@ function mapCsvRowToEntity(type, row, idx){
       stepsColor: row.stepscolor || row.steps_color || defaultTopicColors.steps,
       warnColor: row.warncolor || row.warn_color || defaultTopicColors.warn,
       notesColor: row.notescolor || row.notes_color || defaultTopicColors.notes,
+      externalLink: row.externallink || row.link || row.url || '',
+      externalLinkLabel: row.externallinklabel || row.linklabel || row.link_label || '',
       relatedAlgorithmIds: parseCsvCategories(row.relatedalgorithmids || row.related_algorithms || row.algorithms || ''),
       sections: parseTopicSectionsField(row.sections || row.s || '')
     }, idx);
@@ -1651,6 +1707,35 @@ function normalizeTopic(topic, idx=0){
     s: sections
   };
 }
+function normalizeTopic(topic, idx=0){
+  const sectionsRaw = Array.isArray(topic?.s) ? topic.s : (Array.isArray(topic?.sections) ? topic.sections : []);
+  const sections = sectionsRaw
+    .map((sec, i) => normalizeSection(sec, i === 0 ? 'ok' : 'warn'))
+    .filter(sec => Array.isArray(sec?.[2]) && sec[2].length)
+    .filter(sec => !isAutoTopicPlaceholderSection(sec));
+  const imageCandidates = Array.isArray(topic?.images) ? topic.images : [topic?.img || topic?.image].filter(Boolean);
+  const images = imageCandidates.map(x => String(x||'').trim()).filter(Boolean).slice(0,4);
+  const externalLink = normalizeExternalLink(topic?.externalLink ?? topic?.link ?? topic?.url ?? '');
+  return {
+    id: topic?.id || `t${Date.now()}_${idx}`,
+    n: Number(topic?.n) || idx + 1,
+    category: normalizeTopicCategory(topic?.category ?? topic?.group ?? topic?.sectionCategory, topic),
+    icon: topic?.icon || 'đź©ş',
+    t: topic?.t || topic?.title || 'Nowy temat',
+    img: images[0] || 'assets/topics/sec01.jpg',
+    images,
+    lead: String(topic?.lead ?? topic?.intro ?? topic?.desc ?? '').trim(),
+    leadTitle: String(topic?.leadTitle ?? topic?.leadHeader ?? topic?.lead_heading ?? 'WstÄ™p').trim() || 'WstÄ™p',
+    leadColor: topic?.leadColor || '#2a6dd9',
+    stepsColor: topic?.stepsColor || '#1f8f4d',
+    warnColor: topic?.warnColor || '#c63b3b',
+    notesColor: topic?.notesColor || '#0b4fa2',
+    externalLink,
+    externalLinkLabel: String(topic?.externalLinkLabel ?? topic?.linkLabel ?? topic?.linklabel ?? '').trim(),
+    relatedAlgorithmIds: Array.isArray(topic?.relatedAlgorithmIds) ? topic.relatedAlgorithmIds.filter(Boolean) : [],
+    s: sections
+  };
+}
 function normalizeAlgorithm(algo, idx=0){
   const stepsRaw = Array.isArray(algo?.steps) ? algo.steps : Array.isArray(algo?.items) ? algo.items : [];
   const steps = stepsRaw.map(x => String(x ?? '').trim()).filter(Boolean);
@@ -1703,6 +1788,37 @@ function openPrintWindow(html){
 }
 function printAlgorithms(){
   openPrintWindow(algorithmExportHtml());
+}
+function getPrintableAlgorithms(selection=null){
+  if(!selection) return algorithms.map((algo, idx) => normalizeAlgorithm(algo, idx));
+  const ids = Array.isArray(selection) ? selection : [selection];
+  return ids
+    .map(id => algorithms.map((algo, idx) => normalizeAlgorithm(algo, idx)).find(algo => algo.id === id) || null)
+    .filter(Boolean)
+    .map((algo, idx) => normalizeAlgorithm(algo, idx));
+}
+function algorithmExportHtml(selection=null){
+  const printableAlgorithms = getPrintableAlgorithms(selection);
+  const isSingle = printableAlgorithms.length === 1;
+  const title = isSingle ? `${printableAlgorithms[0].title} - Ratownik PLK` : 'Algorytmy ratunkowe PKP PLK';
+  const heading = isSingle ? `${printableAlgorithms[0].icon || '🧭'} ${printableAlgorithms[0].title}` : 'PKP PLK Ratownik - Algorytmy ratunkowe';
+  const subtitle = isSingle && printableAlgorithms[0]
+    ? `<p style="margin:0 0 20px;color:#456;font-family:Arial,sans-serif;">Kategoria: ${esc(printableAlgorithms[0].category || 'Algorytm')}</p>`
+    : '';
+  const blocks = printableAlgorithms.map(algo => `
+    <section style="margin:0 0 24px;padding:16px;border:1px solid #d9e5f2;border-radius:16px;">
+      <h2 style="margin:0 0 8px;font-family:Arial,sans-serif;">${esc(algo.icon)} ${esc(algo.title)}</h2>
+      <div style="margin:0 0 10px;color:#456;">${esc(algo.category || 'Algorytm')}</div>
+      <ol style="margin:0;padding-left:22px;line-height:1.6;">${(algo.steps || []).map(step => `<li>${esc(step)}</li>`).join('')}</ol>
+    </section>`).join('');
+  return `<!doctype html><html lang="pl"><head><meta charset="utf-8"><title>${esc(title)}</title></head><body style="font-family:Arial,sans-serif;padding:24px;max-width:900px;margin:auto;"><h1>${esc(heading)}</h1>${subtitle}${blocks}</body></html>`;
+}
+function printAlgorithms(selection=null){
+  openPrintWindow(algorithmExportHtml(selection));
+}
+function printCurrentAlgorithm(){
+  if(!currentAlgorithmId) return alert('Najpierw wybierz algorytm.');
+  printAlgorithms(currentAlgorithmId);
 }
 function sanitizeState(){
   rescuers = (rescuers || []).map((r, idx) => normalizeRescuer(r, idx));
@@ -1951,6 +2067,8 @@ function fillTopicForm(topic){
   if ($('topicStepsColor')) $('topicStepsColor').value = normalized?.stepsColor || defaultTopicColors.steps;
   if ($('topicWarnColor')) $('topicWarnColor').value = normalized?.warnColor || defaultTopicColors.warn;
   if ($('topicNotesColor')) $('topicNotesColor').value = normalized?.notesColor || defaultTopicColors.notes;
+  if ($('topicExternalLink')) $('topicExternalLink').value = normalized?.externalLink || '';
+  if ($('topicExternalLinkLabel')) $('topicExternalLinkLabel').value = normalized?.externalLinkLabel || '';
   const main = normalized?.s?.find(sec => sec[0] !== 'warn' && sec[0] !== 'notes') || normalized?.s?.[0];
   const warn = normalized?.s?.find(sec => sec[0] === 'warn');
   $('topicIntro').value = main?.[1] || '';
@@ -1988,6 +2106,9 @@ function renderTopicCard(topic, displayNumber=null){
   const relatedHtml = Array.isArray(t.relatedAlgorithmIds) && t.relatedAlgorithmIds.length
     ? `<div class="related-algos">${t.relatedAlgorithmIds.map(id => { const algo = getAlgorithmById(id); return algo ? `<button class="ghost" data-open-related-algo="${esc(id)}">${esc(algo.icon || '🧭')} ${esc(algo.title)}</button>` : ''; }).join('')}</div>`
     : '';
+  const externalLinkHtml = isExternalLinkValid(t.externalLink)
+    ? `<div class="topic-link-row"><a class="ghost button-link" href="${esc(normalizeExternalLink(t.externalLink))}" target="_blank" rel="noopener noreferrer">${esc(getExternalLinkLabel(t.externalLink, t.externalLinkLabel || ''))}</a></div>`
+    : '';
   return `
     <details class="topic">
       <summary>
@@ -1999,7 +2120,7 @@ function renderTopicCard(topic, displayNumber=null){
           ${t.lead ? `<section class="topic-lead-card" ${panelStyle(t.leadColor || defaultTopicColors.lead, 0.12)}><h4>${sanitizeRichText(t.leadTitle || 'Wstęp')}</h4><div class="rich-text">${sanitizeRichText(t.lead)}</div></section>` : `<section class="topic-lead-card empty" ${panelStyle(t.leadColor || defaultTopicColors.lead, 0.08)}><h4>${sanitizeRichText(t.leadTitle || 'Wstęp')}</h4><p>Brak opisu wstępnego dla tego tematu.</p></section>`}
         </div>
         ${(t.images || [t.img]).length ? `<div class="topic-gallery cols-${Math.min(Math.max((t.images || [t.img]).length,1),4)}">${(t.images || [t.img]).slice(0,4).map(src => `<img src="${esc(src || 'assets/topics/sec01.jpg')}" alt="${esc(t.t)}">`).join('')}</div>` : ''}
-        ${sectionHtml || relatedHtml ? `<div class="blocks topic-wide-blocks">${sectionHtml}${relatedHtml}</div>` : ''}
+        ${sectionHtml || relatedHtml || externalLinkHtml ? `<div class="blocks topic-wide-blocks">${sectionHtml}${relatedHtml}${externalLinkHtml}</div>` : ''}
       </div>
     </details>
   `;
@@ -2009,7 +2130,7 @@ function renderTopics(query=''){
   renumberTopics();
   const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
-  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, t.leadTitle, t.lead, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
+  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, t.leadTitle, t.lead, t.externalLink, t.externalLinkLabel, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
   const grouped = groupTopicsByCategory(filtered);
   $('topics').innerHTML = grouped.map(group => `
     <details class="topic-category" ${q ? 'open' : ''}>
@@ -2051,20 +2172,45 @@ function renderAlgorithms(query=''){
     </button>
   `).join('') || '<div class="empty-state">Brak algorytmów pasujących do wyszukiwania.</div>';
 }
+function renderAlgorithms(query=''){
+  const q = query.trim().toLowerCase();
+  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || [a.title, a.category, a.icon, ...(a.steps || [])].join(' ').toLowerCase().includes(q));
+  $('algorithmList').innerHTML = filtered.map(a => `
+    <div class="algo-card-shell">
+      <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
+        <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
+        <span class="algo-card-body">
+          <strong>${esc(a.title)}</strong>
+          <small>${esc(a.category || 'Algorytm')} • ${a.steps.length} kroków</small>
+        </span>
+        <span class="algo-card-action">Uruchom</span>
+      </button>
+      <div class="algorithm-card-tools">
+        <button class="ghost" type="button" data-print-algo="${esc(a.id)}">Drukuj ten algorytm</button>
+      </div>
+    </div>
+  `).join('') || '<div class="empty-state">Brak algorytmów pasujących do wyszukiwania.</div>';
+}
 function renderAlgorithmStepper(){
-  const algo = normalizeAlgorithm(getAlgorithmById(currentAlgorithmId) || {}, 0);
-  if(!algo){
+  const rawAlgo = getAlgorithmById(currentAlgorithmId);
+  if(!rawAlgo){
     $('algorithmStepper').className = 'algorithm-stepper empty-state';
     $('algorithmStepper').innerHTML = 'Brak algorytmów.';
     $('algoCountBadge').textContent = 'Algorytm 0 z 0';
     $('algoProgressBadge').textContent = 'Brak algorytmu';
+    if($('printCurrentAlgorithmStepperBtn')) $('printCurrentAlgorithmStepperBtn').disabled = true;
     return;
   }
+  const algo = normalizeAlgorithm(rawAlgo, 0);
   if(currentAlgorithmStep < 0) currentAlgorithmStep = 0;
   if(currentAlgorithmStep > algo.steps.length - 1) currentAlgorithmStep = algo.steps.length - 1;
   const step = algo.steps[currentAlgorithmStep];
   $('algoCountBadge').textContent = `Algorytm ${algorithms.findIndex(a => normalizeAlgorithm(a).id === algo.id) + 1} z ${algorithms.length}`;
   $('algoProgressBadge').textContent = `Krok ${currentAlgorithmStep + 1} / ${algo.steps.length}`;
+  if($('printCurrentAlgorithmStepperBtn')){
+    $('printCurrentAlgorithmStepperBtn').disabled = false;
+    $('printCurrentAlgorithmStepperBtn').textContent = 'Drukuj ten algorytm';
+  }
   $('algorithmStepper').className = `algorithm-stepper accent-${esc(algo.accent || 'primary')}`;
   $('algorithmStepper').innerHTML = `
     <div class="stepper-head">
@@ -2171,6 +2317,93 @@ function renderKits(query=''){
         <button class="ghost danger-lite" data-delete-kit="${k.id}">Usuń</button>
       </div>
     </div>`).join('') || '<div class="empty-state">Brak apteczek.</div>';
+  if($('expiredKitReportOutput')) $('expiredKitReportOutput').value = buildExpiredKitReport();
+}
+function syncKitZoneFilterDefault(){
+  const select = $('kitZoneFilter');
+  if(!select) return '';
+  const defaultZone = getDefaultZone();
+  const hasDefault = !!defaultZone && [...select.options].some(option => option.value === defaultZone);
+  if((!kitZoneFilterTouched || !select.value) && hasDefault){
+    select.value = defaultZone;
+  }
+  return select.value || '';
+}
+function buildKitItemsHtml(items=[], admin=false){
+  const normalizedItems = (items || []).map(normalizeKitItem).filter(item => item.name);
+  if(!normalizedItems.length) return '<div class="empty-state">Brak wyposażenia.</div>';
+  return `<ul class="contents-list">${normalizedItems.map(item => {
+    const parts = [
+      esc(item.name),
+      item.size ? `rozmiar: ${esc(item.size)}` : '',
+      item.qty ? `ilość: ${esc(item.qty)}` : ''
+    ].filter(Boolean);
+    const expiryText = item.expiry ? `${esc(formatExpiry(item.expiry))}${isExpired(item.expiry) ? ' • przeterminowane' : ''}` : 'brak terminu';
+    return `<li>${parts.join(' • ')}${admin ? ` <span class="kit-admin-meta">(termin: <strong>${expiryText}</strong>)</span>` : `${item.expiry ? ` • termin: ${expiryText}` : ''}`}</li>`;
+  }).join('')}</ul>`;
+}
+function buildKitCardHtml(kit, options={}){
+  const admin = options.admin === true;
+  const normalizedKit = normalizeKit(kit);
+  const zone = getKitZone(normalizedKit);
+  const categoriesHtml = (normalizedKit.categories || []).length
+    ? `<div class="kit-tags">${(normalizedKit.categories || []).map(category => `<span class="badge small">${esc(category)}</span>`).join('')}</div>`
+    : '<small>Brak kategorii wyposażenia.</small>';
+  const itemsCount = (normalizedKit.items || []).length;
+  const expiredCount = (normalizedKit.items || []).filter(item => isExpired(item.expiry)).length;
+  const equipmentLabel = `${itemsCount} ${itemsCount === 1 ? 'pozycja' : itemsCount >= 2 && itemsCount <= 4 ? 'pozycje' : 'pozycji'}${expiredCount ? ` • przeterminowane: ${expiredCount}` : ''}`;
+  return `
+    <details class="${admin ? 'admin-collapsible' : 'details-card'}">
+      <summary>
+        <div class="details-summary-main">
+          <div class="details-summary-row">
+            <strong>${esc(normalizedKit.name)}</strong>
+            ${zone ? `<span class="badge small">${esc(zone)}</span>` : ''}
+          </div>
+          <div class="details-summary-meta">
+            <span>${esc(normalizedKit.location || 'brak lokalizacji')}</span>
+            <span>Rodzaj: ${esc(normalizedKit.type || 'apteczka')}</span>
+            ${categoriesHtml}
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="${admin ? 'admin-collapsible-body' : 'details-card-body'}">
+        <details class="kit-items-panel">
+          <summary>
+            <div class="details-summary-main">
+              <strong>Wyposażenie</strong>
+              <div class="details-summary-meta">
+                <span>${equipmentLabel}</span>
+              </div>
+            </div>
+            <span class="disclosure-indicator" aria-hidden="true"></span>
+          </summary>
+          <div class="details-card-body">
+            ${buildKitItemsHtml(normalizedKit.items || [], admin)}
+          </div>
+        </details>
+        ${admin ? `<div class="row admin-actions"><button class="ghost" data-edit-kit="${normalizedKit.id}">Edytuj</button><button class="ghost danger-lite" data-delete-kit="${normalizedKit.id}">Usuń</button></div>` : ''}
+      </div>
+    </details>
+  `;
+}
+function renderKits(query=''){
+  kits = kits.map((k, idx) => normalizeKit(k, idx));
+  populateSelect('kitZoneFilter', uniqueValues(kits.map(k => getKitZone(k))), 'Wszystkie zakłady');
+  populateSelect('kitTypeFilter', uniqueValues(kits.map(k => k.type || 'inne')), 'Wszystkie rodzaje');
+  populateSelect('kitCategoryFilter', uniqueValues(kits.flatMap(k => k.categories || [])), 'Wszystkie kategorie');
+  const q = query.trim().toLowerCase();
+  const zoneFilter = syncKitZoneFilterDefault();
+  const typeFilter = $('kitTypeFilter')?.value || '';
+  const catFilter = $('kitCategoryFilter')?.value || '';
+  const list = kits.filter(k => {
+    const zone = getKitZone(k);
+    const hay = [k.name, k.location, zone, k.type || '', ...(k.categories || []), ...(k.items || []).flatMap(i => [i.name, i.size || '', i.qty || '', i.expiry])].join(' ').toLowerCase();
+    return (!q || hay.includes(q)) && (!zoneFilter || zone === zoneFilter) && (!typeFilter || (k.type || '') === typeFilter) && (!catFilter || (k.categories || []).includes(catFilter));
+  });
+  $('kitList').innerHTML = list.map(k => buildKitCardHtml(k)).join('') || '<div class="empty-state">Brak apteczek pasujących do wyszukiwania.</div>';
+  $('adminKitTable').innerHTML = kits.map(k => buildKitCardHtml(k, { admin:true })).join('') || '<div class="empty-state">Brak apteczek.</div>';
   if($('expiredKitReportOutput')) $('expiredKitReportOutput').value = buildExpiredKitReport();
 }
 function renderTopicCategoryPriorityEditor(){
@@ -2286,6 +2519,119 @@ function renderAdminAlgorithms(){
         <button class="ghost danger-lite" data-delete-algorithm="${a.id}">Usuń</button>
       </div>
     </div>`;
+  }).join('') || '<div class="empty-state">Brak algorytmów.</div>';
+}
+function renderAdminEventTypes(){
+  const box = $('adminEventTypeTable');
+  if(!box) return;
+  box.innerHTML = (eventTypes || []).map((name, idx) => `
+    <details class="admin-collapsible">
+      <summary>
+        <div class="details-summary-main">
+          <strong>${idx + 1}. ${esc(name)}</strong>
+          <div class="details-summary-meta">
+            <span>Widoczne na ekranie Start</span>
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-collapsible-body">
+        <div class="row admin-actions">
+          <button class="ghost" data-edit-event-type="${idx}">Edytuj</button>
+          <button class="ghost danger-lite" data-delete-event-type="${idx}">Usuń</button>
+        </div>
+      </div>
+    </details>
+  `).join('') || '<div class="empty-state">Brak typów zdarzeń.</div>';
+}
+function renderTopicCategoryPriorityEditor(){
+  const box = $('topicCategoryPriorityTable');
+  if(!box) return;
+  normalizeTopicCategoryPriorityState();
+  const categories = normalizeTopicCategoryPriorityList(topicCategoryPriority, topics);
+  const counts = new Map();
+  topics.map((topic, idx) => normalizeTopic(topic, idx)).forEach(topic => {
+    counts.set(topic.category, (counts.get(topic.category) || 0) + 1);
+  });
+  box.innerHTML = categories.map((category, idx) => {
+    const count = counts.get(category) || 0;
+    const topicLabel = count === 1 ? 'temat' : 'tematów';
+    const disableUp = idx === 0;
+    const disableDown = idx === categories.length - 1;
+    return `
+      <details class="admin-collapsible">
+        <summary>
+          <div class="details-summary-main">
+            <strong>${idx + 1}. ${esc(category)}</strong>
+            <div class="details-summary-meta">
+              <span>${count} ${topicLabel}</span>
+            </div>
+          </div>
+          <span class="disclosure-indicator" aria-hidden="true"></span>
+        </summary>
+        <div class="admin-collapsible-body">
+          <div class="row admin-actions">
+            <button class="ghost" type="button" data-move-topic-category="up" data-topic-category-name="${esc(category)}" ${disableUp ? 'disabled' : ''}>↑</button>
+            <button class="ghost" type="button" data-move-topic-category="down" data-topic-category-name="${esc(category)}" ${disableDown ? 'disabled' : ''}>↓</button>
+          </div>
+        </div>
+      </details>
+    `;
+  }).join('') || '<div class="empty-state">Najpierw dodaj tematy, aby ustawić kolejność kategorii.</div>';
+}
+function renderOfflineAlgorithmPriorityEditor(){
+  const box = $('offlineAlgorithmPriorityTable');
+  if(!box) return;
+  normalizeOfflineAlgorithmIds();
+  const list = offlineAlgorithmIds
+    .map(id => algorithms.find((algo, idx) => normalizeAlgorithm(algo, idx).id === id))
+    .filter(Boolean)
+    .map((algo, idx) => normalizeAlgorithm(algo, idx));
+  box.innerHTML = list.map((algo, idx) => `
+    <details class="admin-collapsible">
+      <summary>
+        <div class="details-summary-main">
+          <strong>${idx + 1}. ${esc(algo.icon)} ${esc(algo.title)}</strong>
+          <div class="details-summary-meta">
+            <span>${esc(algo.category)} • ${algo.steps.length} kroków</span>
+          </div>
+        </div>
+        <span class="disclosure-indicator" aria-hidden="true"></span>
+      </summary>
+      <div class="admin-collapsible-body">
+        <div class="row admin-actions">
+          <button class="ghost" type="button" data-move-offline-algo="top" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>⇡</button>
+          <button class="ghost" type="button" data-move-offline-algo="up" data-offline-algo-id="${esc(algo.id)}" ${idx === 0 ? 'disabled' : ''}>↑</button>
+          <button class="ghost" type="button" data-move-offline-algo="down" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>↓</button>
+          <button class="ghost" type="button" data-move-offline-algo="bottom" data-offline-algo-id="${esc(algo.id)}" ${idx === list.length - 1 ? 'disabled' : ''}>⇣</button>
+        </div>
+      </div>
+    </details>
+  `).join('') || '<div class="empty-state">Zaznacz algorytmy na liście poniżej, aby ustawić ich kolejność offline.</div>';
+}
+function renderAdminAlgorithms(){
+  $('adminAlgorithmTable').innerHTML = algorithms.map((algo, idx) => {
+    const a = normalizeAlgorithm(algo, idx);
+    return `
+      <details class="admin-collapsible">
+        <summary>
+          <div class="details-summary-main">
+            <strong>${esc(a.icon)} ${esc(a.title)}</strong>
+            <div class="details-summary-meta">
+              <span>${esc(a.category)} • ${a.steps.length} kroków • styl: ${esc(a.accent)}</span>
+            </div>
+          </div>
+          <span class="disclosure-indicator" aria-hidden="true"></span>
+        </summary>
+        <div class="admin-collapsible-body">
+          <label class="inline-check"><input type="checkbox" data-toggle-offline-algo="${a.id}" ${offlineAlgorithmIds.includes(a.id) ? 'checked' : ''}> Pokaż w trybie offline</label>
+          <div class="row admin-actions">
+            <button class="ghost" data-print-algo="${a.id}">Drukuj</button>
+            <button class="ghost" data-edit-algorithm="${a.id}">Edytuj</button>
+            <button class="ghost danger-lite" data-delete-algorithm="${a.id}">Usuń</button>
+          </div>
+        </div>
+      </details>`;
   }).join('') || '<div class="empty-state">Brak algorytmów.</div>';
 }
 function renderTopicAlgorithmPicker(selectedIds=[]){
@@ -2415,7 +2761,6 @@ function updateOfflineExperience(){
   const offline = navigator.onLine === false;
   if($('offlineInlineCard')) $('offlineInlineCard').hidden = !offline;
   renderOfflineSummary();
-updateOfflineExperience();
   if(offline){
     updateOnlineStatus('Brak internetu — uruchomiono tryb offline. Najważniejsze algorytmy są dostępne lokalnie.', 'warn');
   }
@@ -2488,12 +2833,13 @@ $('findNearestAedBtn').onclick = () => $('gpsBtn').click();
 $('openExternalAedMapBtn').onclick = () => window.open('https://openaedmap.org/', '_blank');
 $('aedSearch').addEventListener('input', e => renderAeds(null, e.target.value));
 $('kitSearch').addEventListener('input', e => renderKits(e.target.value));
+if ($('kitZoneFilter')) $('kitZoneFilter').addEventListener('change', () => { kitZoneFilterTouched = true; renderKits($('kitSearch').value || ''); });
 if ($('kitTypeFilter')) $('kitTypeFilter').addEventListener('change', () => renderKits($('kitSearch').value || ''));
 if ($('kitCategoryFilter')) $('kitCategoryFilter').addEventListener('change', () => renderKits($('kitSearch').value || ''));
 if ($('rescuerZakladFilter')) $('rescuerZakladFilter').addEventListener('change', () => { renderRescuers(); });
-if ($('defaultZakladSelect')) $('defaultZakladSelect').addEventListener('change', () => { const val = $('defaultZakladSelect').value || ''; localStorage.setItem(STORAGE_KEYS.defaultZone, val); renderRescuers(); });
-if ($('saveDefaultZakladBtn')) $('saveDefaultZakladBtn').onclick = () => { const val = $('defaultZakladSelect').value || ''; localStorage.setItem(STORAGE_KEYS.defaultZone, val); renderRescuers(); const target = getDefaultRescuerForZone(val); alert(val ? `Ustawiono domyślny zakład: ${val}${target ? `\nDomyślny ratownik: ${target.name}` : ''}` : 'Wyczyszczono domyślny zakład.'); }; 
-if ($('clearDefaultZakladBtn')) $('clearDefaultZakladBtn').onclick = () => { localStorage.removeItem(STORAGE_KEYS.defaultZone); if($('defaultZakladSelect')) $('defaultZakladSelect').value=''; renderRescuers(); alert('Wyczyszczono domyślny zakład.'); };
+if ($('defaultZakladSelect')) $('defaultZakladSelect').addEventListener('change', () => { const val = $('defaultZakladSelect').value || ''; localStorage.setItem(STORAGE_KEYS.defaultZone, val); kitZoneFilterTouched = false; renderRescuers(); renderKits($('kitSearch').value || ''); });
+if ($('saveDefaultZakladBtn')) $('saveDefaultZakladBtn').onclick = () => { const val = $('defaultZakladSelect').value || ''; localStorage.setItem(STORAGE_KEYS.defaultZone, val); kitZoneFilterTouched = false; renderRescuers(); renderKits($('kitSearch').value || ''); const target = getDefaultRescuerForZone(val); alert(val ? `Ustawiono domyślny zakład: ${val}${target ? `\nDomyślny ratownik: ${target.name}` : ''}` : 'Wyczyszczono domyślny zakład.'); };
+if ($('clearDefaultZakladBtn')) $('clearDefaultZakladBtn').onclick = () => { localStorage.removeItem(STORAGE_KEYS.defaultZone); if($('defaultZakladSelect')) $('defaultZakladSelect').value=''; kitZoneFilterTouched = false; renderRescuers(); renderKits($('kitSearch').value || ''); alert('Wyczyszczono domyślny zakład.'); };
 if ($('rescuerSearch')) $('rescuerSearch').addEventListener('input', renderRescuers);
 document.querySelectorAll('.rich-toolbar').forEach(toolbar => {
   const target = toolbar.dataset.target;
@@ -2632,6 +2978,10 @@ const METRONOME_INTERVAL_SEC = 60 / METRONOME_BPM;
 const METRONOME_LOOKAHEAD_MS = 60;
 const METRONOME_SCHEDULE_AHEAD_SEC = 0.18;
 const METRONOME_RESYNC_THRESHOLD_SEC = 0.35;
+let assessmentTimerInterval = null;
+let assessmentTimerState = 'idle';
+let assessmentTimerEndsAt = 0;
+let assessmentTimerPrepEndsAt = 0;
 async function ensureMetronomeAudioContext(){
   const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
   if(!AudioContextCtor) throw new Error('Ta przeglądarka nie obsługuje Web Audio.');
@@ -2655,6 +3005,79 @@ function scheduleMetronomeTick(atTime){
   osc.connect(gain).connect(audioCtx.destination);
   osc.start(atTime);
   osc.stop(atTime + 0.09);
+}
+function scheduleSignalBeep(atTime, frequency=1040, duration=0.12){
+  if(!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.frequency.value = frequency;
+  osc.type = 'sine';
+  gain.gain.setValueAtTime(0.0001, atTime);
+  gain.gain.exponentialRampToValueAtTime(0.22, atTime + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, atTime + duration);
+  osc.connect(gain).connect(audioCtx.destination);
+  osc.start(atTime);
+  osc.stop(atTime + duration + 0.02);
+}
+async function playAssessmentSignal(count=1){
+  try{
+    const ctx = await ensureMetronomeAudioContext();
+    const base = ctx.currentTime + 0.02;
+    for(let i = 0; i < count; i++){
+      scheduleSignalBeep(base + (i * 0.18), i === count - 1 ? 1220 : 1040, 0.12);
+    }
+  }catch(_){}
+}
+function setAssessmentTimerBadge(text='', hidden=false){
+  const badge = $('assessmentTimerBadge');
+  if(!badge) return;
+  badge.hidden = !!hidden;
+  if(!hidden) badge.textContent = text || 'Timer gotowy';
+}
+function stopAssessmentTimer(options={}){
+  if(assessmentTimerInterval){
+    clearInterval(assessmentTimerInterval);
+    assessmentTimerInterval = null;
+  }
+  assessmentTimerState = 'idle';
+  assessmentTimerEndsAt = 0;
+  assessmentTimerPrepEndsAt = 0;
+  if(options.keepMessage){
+    setAssessmentTimerBadge(options.message || 'Timer gotowy', false);
+  }else{
+    setAssessmentTimerBadge('', true);
+  }
+}
+function runAssessmentTimerTick(){
+  if(assessmentTimerState === 'idle') return;
+  const now = Date.now();
+  if(assessmentTimerState === 'prep'){
+    const left = Math.max(0, Math.ceil((assessmentTimerPrepEndsAt - now) / 1000));
+    if(left > 0){
+      setAssessmentTimerBadge(`Start badania za ${left} s`, false);
+      return;
+    }
+    assessmentTimerState = 'measure';
+    playAssessmentSignal(1);
+  }
+  if(assessmentTimerState === 'measure'){
+    const left = Math.max(0, Math.ceil((assessmentTimerEndsAt - now) / 1000));
+    if(left > 0){
+      setAssessmentTimerBadge(`Badanie oddechu i tętna: ${left} s`, false);
+      return;
+    }
+    playAssessmentSignal(2);
+    stopAssessmentTimer({ keepMessage:true, message:'Badanie zakończone' });
+  }
+}
+function startAssessmentTimer(){
+  stopAssessmentTimer();
+  assessmentTimerState = 'prep';
+  assessmentTimerPrepEndsAt = Date.now() + 3000;
+  assessmentTimerEndsAt = assessmentTimerPrepEndsAt + 10000;
+  setAssessmentTimerBadge('Start badania za 3 s', false);
+  runAssessmentTimerTick();
+  assessmentTimerInterval = setInterval(runAssessmentTimerTick, 150);
 }
 function stopMetronome(){
   metroRunning = false;
@@ -2702,6 +3125,8 @@ async function startMetronome(){
 $('startMetronomeBtn').onclick = () => { startMetronome(); };
 refreshNotificationButtons();
 $('stopMetronomeBtn').onclick = () => { stopMetronome(); };
+if($('startAssessmentTimerBtn')) $('startAssessmentTimerBtn').onclick = () => { startAssessmentTimer(); };
+if($('stopAssessmentTimerBtn')) $('stopAssessmentTimerBtn').onclick = () => { stopAssessmentTimer(); };
 document.addEventListener('visibilitychange', () => {
   if(!metroRunning) return;
   if(document.hidden){
@@ -2718,7 +3143,7 @@ document.addEventListener('visibilitychange', () => {
     if(metroRunning) runMetronomeScheduler();
   }).catch(() => {});
 });
-window.addEventListener('pagehide', () => stopMetronome());
+window.addEventListener('pagehide', () => { stopMetronome(); stopAssessmentTimer(); });
 if ($('enableNotificationsBtn')) $('enableNotificationsBtn').onclick = async () => {
   if(!('Notification' in window)) return alert('Ta przeglądarka nie obsługuje powiadomień.');
   if(!window.isSecureContext) return alert('Powiadomienia wymagają bezpiecznego połączenia HTTPS albo uruchomienia aplikacji jako zainstalowane PWA z GitHub Pages.');
@@ -2879,7 +3304,9 @@ if ($('cancelEventTypeEditBtn')) $('cancelEventTypeEditBtn').onclick = () => {
 $('saveTopicBtn').onclick = () => {
   const existingTopic = currentTopicEditId ? topics.find(x => x.id === currentTopicEditId) : null;
   const title = $('topicTitle').value.trim();
+  const externalLink = normalizeExternalLink($('topicExternalLink')?.value || '');
   if(!title) return alert('Podaj tytuł tematu.');
+  if(externalLink && !isExternalLinkValid(externalLink)) return alert('Podaj poprawny link zewnętrzny zaczynający się od http:// lub https://.');
   const item = {
     id: currentTopicEditId || 't'+Date.now(),
     n: topics.length + 1,
@@ -2894,6 +3321,8 @@ $('saveTopicBtn').onclick = () => {
     stepsColor: $('topicStepsColor')?.value || defaultTopicColors.steps,
     warnColor: $('topicWarnColor')?.value || defaultTopicColors.warn,
     notesColor: $('topicNotesColor')?.value || defaultTopicColors.notes,
+    externalLink,
+    externalLinkLabel: $('topicExternalLinkLabel')?.value.trim() || '',
     relatedAlgorithmIds: [...document.querySelectorAll('#topicAlgorithmLinks input:checked')].map(i => i.value),
     s: normalizeTopicSectionsFromForm()
   };
@@ -2932,6 +3361,7 @@ $('exportAlgorithmsHtmlBtn').onclick = () => exportBlob('pkp_plk_algorytmy_ratun
 if($('printAlgorithmsBtn')) $('printAlgorithmsBtn').onclick = () => printAlgorithms();
 if($('printAlgorithmsPublicBtn')) $('printAlgorithmsPublicBtn').onclick = () => printAlgorithms();
 if($('printAlgorithmsStepperBtn')) $('printAlgorithmsStepperBtn').onclick = () => printAlgorithms();
+if($('printCurrentAlgorithmStepperBtn')) $('printCurrentAlgorithmStepperBtn').onclick = () => printCurrentAlgorithm();
 if($('resetTopicCategoryPriorityBtn')) $('resetTopicCategoryPriorityBtn').onclick = () => {
   topicCategoryPriority = [...DEFAULT_TOPIC_CATEGORY_PRIORITY];
   saveLocal();
@@ -2966,7 +3396,7 @@ $('resetLocalBtn').onclick = () => {
   alert('Przywrócono dane domyślne.');
 };
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-move-topic-category],[data-move-offline-algo],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type]') || e.target;
+  const t = e.target.closest('[data-edit-rescuer],[data-delete-rescuer],[data-edit-aed],[data-delete-aed],[data-edit-kit],[data-delete-kit],[data-edit-topic],[data-delete-topic],[data-move-topic],[data-move-topic-category],[data-move-offline-algo],[data-select-algo],[data-edit-algorithm],[data-delete-algorithm],[data-open-related-algo],[data-toggle-offline-algo],[data-edit-event-type],[data-delete-event-type],[data-print-algo]') || e.target;
   const rescuerId = t.dataset.editRescuer || t.dataset.deleteRescuer;
   const aedId = t.dataset.editAed || t.dataset.deleteAed;
   const kitId = t.dataset.editKit || t.dataset.deleteKit;
@@ -2981,6 +3411,11 @@ document.addEventListener('click', e => {
   const relatedAlgoId = t.dataset.openRelatedAlgo;
   const offlineAlgoId = t.dataset.toggleOfflineAlgo;
   const eventTypeIndex = t.dataset.editEventType ?? t.dataset.deleteEventType;
+  const printAlgoId = t.dataset.printAlgo || '';
+  if (printAlgoId){
+    printAlgorithms(printAlgoId);
+    return;
+  }
   if (offlineAlgoId){
     if(t.checked){
       if(!offlineAlgorithmIds.includes(offlineAlgoId)) offlineAlgorithmIds.push(offlineAlgoId);
@@ -3159,6 +3594,7 @@ renderAll();
 window.showScreen('screen-start');
 fetchPublicIp();
 setTheme(localStorage.getItem(STORAGE_KEYS.theme) || 'light');
+updateOfflineExperience();
 if (hasOnlineConfig()) ensureOnlineAdminBox();
 if ($('onlineAdminLoginBtn')) $('onlineAdminLoginBtn').onclick = async () => {
   if(!hasOnlineConfig()) return alert('Uzupełnij config.js.');
