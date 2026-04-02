@@ -211,21 +211,11 @@ const supabaseClient = (hasRealSupabaseConfig && window.supabase)
     })
   : null;
 const ONLINE_TABLES = ['rescuers','aeds','kits','topics','algorithms','app_settings'];
-const QUICK_FILTERS = [
-  { label:'RKO', keywords:['rko','resuscytacja','aed'] },
-  { label:'krwotok', keywords:['krwotok','krwotoki','krwawienie','staza'] },
-  { label:'dziecko', keywords:['dziecko','dzieci','dzieciece','dziecięce','niemowle','niemowlę','pediatryczne'] },
-  { label:'kolej', keywords:['kolej','kolejowy','kolejowe','pkp','tor','wypadek kolejowy'] },
-  { label:'oparzenie', keywords:['oparzenie','oparzenia','hydrozel','hydrożel','parzacy','parzący'] },
-  { label:'ciąża', keywords:['ciaza','ciąża','ciazy','ciąży','kobieta w ciąży','porod','poród'] }
-];
 let isApplyingRemoteState = false;
 let onlineSyncTimer = null;
 let onlineRealtimeChannel = null;
 let onlineRefreshTimer = null;
 let onlineSessionEmail = '';
-let activeTopicQuickFilter = '';
-let activeAlgorithmQuickFilter = '';
 let lastSyncSuccessAt = localStorage.getItem(STORAGE_KEYS.syncLastSuccessAt) || '';
 let pendingLocalChanges = Math.max(0, Number(localStorage.getItem(STORAGE_KEYS.pendingLocalChanges) || '0') || 0);
 let lastSyncError = localStorage.getItem(STORAGE_KEYS.lastSyncError) || '';
@@ -2318,39 +2308,15 @@ function renderTopicCard(topic, displayNumber=null){
     </details>
   `;
 }
-function getQuickFilterKeywords(value){
-  const match = QUICK_FILTERS.find(item => item.label === value);
-  return (match?.keywords || [value || '']).map(normalizeSearchText).filter(Boolean);
-}
-function matchesQuickFilter(haystack, activeFilter){
-  if(!activeFilter) return true;
-  const needles = getQuickFilterKeywords(activeFilter);
-  return needles.some(needle => haystack.includes(needle));
-}
-function renderQuickFilterButtons(){
-  document.querySelectorAll('[data-quick-filter-target]').forEach(btn => {
-    const target = btn.dataset.quickFilterTarget || '';
-    const filter = btn.dataset.quickFilter || '';
-    const isActive = target === 'topics'
-      ? activeTopicQuickFilter === filter
-      : activeAlgorithmQuickFilter === filter;
-    btn.classList.toggle('active', isActive);
-    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
-  });
-}
 function renderTopics(query=''){
   const q = normalizeSearchText(query.trim());
-  const activeFilter = activeTopicQuickFilter;
   renumberTopics();
   const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
-  const filtered = normalizedTopics.filter(t => {
-    const haystack = normalizeSearchText([t.category, t.t, t.icon, t.leadTitle, t.lead, t.externalLink, t.externalLinkLabel, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' '));
-    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
-  });
+  const filtered = normalizedTopics.filter(t => !q || normalizeSearchText([t.category, t.t, t.icon, t.leadTitle, t.lead, t.externalLink, t.externalLinkLabel, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ')).includes(q));
   const grouped = groupTopicsByCategory(filtered);
   $('topics').innerHTML = grouped.map(group => `
-    <details class="topic-category" ${(q || activeFilter) ? 'open' : ''}>
+    <details class="topic-category" ${q ? 'open' : ''}>
       <summary>
         <span class="topic-category-title">
           <span class="topic-category-badge">${esc(group.category)}</span>
@@ -2377,15 +2343,11 @@ function getAlgorithmById(id){
 }
 function renderAlgorithms(query=''){
   const q = normalizeSearchText(query.trim());
-  const activeFilter = activeAlgorithmQuickFilter;
-  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => {
-    const haystack = normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' '));
-    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
-  });
+  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' ')).includes(q));
   $('algorithmList').innerHTML = filtered.map(a => `
     <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
       <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
-      <span class="algo-card-body">
+        <span class="algo-card-body">
         <strong>${esc(a.title)}</strong>
         <small>${esc(a.category || 'Algorytm')} • ${a.steps.length} kroków</small>
       </span>
@@ -2395,11 +2357,7 @@ function renderAlgorithms(query=''){
 }
 function renderAlgorithms(query=''){
   const q = normalizeSearchText(query.trim());
-  const activeFilter = activeAlgorithmQuickFilter;
-  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => {
-    const haystack = normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' '));
-    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
-  });
+  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' ')).includes(q));
   $('algorithmList').innerHTML = filtered.map(a => `
     <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
       <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
@@ -2958,7 +2916,6 @@ normalizeAppInfo();
   renderOfflineSummary();
   renderNotificationInbox();
   renderAppNotice();
-  renderQuickFilterButtons();
   updateSyncStatusDisplay();
 }
 function renderNotificationInbox(){
@@ -3069,21 +3026,9 @@ if ($('openOfflineInlineBtn')) $('openOfflineInlineBtn').onclick = () => { if($(
 if ($('openOfflineBtnInline')) $('openOfflineBtnInline').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = false; renderOfflineSummary(); };
 if ($('closeOfflineBtn')) $('closeOfflineBtn').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = true; };
 $('topicSearch').addEventListener('input', e => renderTopics(e.target.value));
-$('clearTopicSearchBtn').onclick = () => { activeTopicQuickFilter = ''; $('topicSearch').value = ''; renderTopics(''); renderQuickFilterButtons(); };
+$('clearTopicSearchBtn').onclick = () => { $('topicSearch').value = ''; renderTopics(''); };
 $('algorithmSearch').addEventListener('input', e => renderAlgorithms(e.target.value));
-$('clearAlgorithmSearchBtn').onclick = () => { activeAlgorithmQuickFilter = ''; $('algorithmSearch').value = ''; renderAlgorithms(''); renderQuickFilterButtons(); };
-document.querySelectorAll('[data-quick-filter-target]').forEach(btn => btn.addEventListener('click', () => {
-  const target = btn.dataset.quickFilterTarget || '';
-  const filter = btn.dataset.quickFilter || '';
-  if(target === 'topics'){
-    activeTopicQuickFilter = activeTopicQuickFilter === filter ? '' : filter;
-    renderTopics($('topicSearch')?.value || '');
-  }else if(target === 'algorithms'){
-    activeAlgorithmQuickFilter = activeAlgorithmQuickFilter === filter ? '' : filter;
-    renderAlgorithms($('algorithmSearch')?.value || '');
-  }
-  renderQuickFilterButtons();
-}));
+$('clearAlgorithmSearchBtn').onclick = () => { $('algorithmSearch').value = ''; renderAlgorithms(''); };
 $('algoPrevBtn').onclick = () => { currentAlgorithmStep = Math.max(0, currentAlgorithmStep - 1); renderAlgorithmStepper(); };
 $('algoNextBtn').onclick = () => { const algo = normalizeAlgorithm(getAlgorithmById(currentAlgorithmId) || {}, 0); if(algo) currentAlgorithmStep = Math.min(algo.steps.length - 1, currentAlgorithmStep + 1); renderAlgorithmStepper(); };
 $('algoResetBtn').onclick = () => { currentAlgorithmStep = 0; renderAlgorithmStepper(); };
