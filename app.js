@@ -2207,19 +2207,14 @@ function renderAlgorithms(query=''){
   const q = query.trim().toLowerCase();
   const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || [a.title, a.category, a.icon, ...(a.steps || [])].join(' ').toLowerCase().includes(q));
   $('algorithmList').innerHTML = filtered.map(a => `
-    <div class="algo-card-shell">
-      <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
-        <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
-        <span class="algo-card-body">
-          <strong>${esc(a.title)}</strong>
-          <small>${esc(a.category || 'Algorytm')} • ${a.steps.length} kroków</small>
-        </span>
-        <span class="algo-card-action">Uruchom</span>
-      </button>
-      <div class="algorithm-card-tools">
-        <button class="ghost" type="button" data-print-algo="${esc(a.id)}">Drukuj ten algorytm</button>
-      </div>
-    </div>
+    <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
+      <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
+      <span class="algo-card-body">
+        <strong>${esc(a.title)}</strong>
+        <small>${esc(a.category || 'Algorytm')} • ${a.steps.length} kroków</small>
+      </span>
+      <span class="algo-card-action">Uruchom</span>
+    </button>
   `).join('') || '<div class="empty-state">Brak algorytmów pasujących do wyszukiwania.</div>';
 }
 function renderAlgorithmStepper(){
@@ -2893,6 +2888,33 @@ const hasLeaflet = typeof window !== 'undefined' && typeof window.L !== 'undefin
 let map = null;
 let userMarker = null;
 let markers = [];
+let lastKnownUserLocation = null;
+function buildOpenAedMapUrl(user=null, zoom=17){
+  if(user && Number.isFinite(Number(user.lat)) && Number.isFinite(Number(user.lon))){
+    return `https://openaedmap.org/pl/#map=${zoom}/${Number(user.lat).toFixed(6)}/${Number(user.lon).toFixed(6)}`;
+  }
+  return 'https://openaedmap.org/pl/';
+}
+function applyUserLocation(user){
+  if(!user || !Number.isFinite(Number(user.lat)) || !Number.isFinite(Number(user.lon))) return;
+  lastKnownUserLocation = { lat: Number(user.lat), lon: Number(user.lon) };
+  if($('gpsLocation')) $('gpsLocation').value = `${lastKnownUserLocation.lat.toFixed(6)}, ${lastKnownUserLocation.lon.toFixed(6)}`;
+  renderAeds(lastKnownUserLocation, $('aedSearch').value || '');
+  renderMap(lastKnownUserLocation);
+}
+function requestCurrentUserLocation(onSuccess, onError){
+  if(!navigator.geolocation){
+    onError?.({ message:'Ta przeglądarka nie obsługuje geolokalizacji.' });
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(pos => {
+    const user = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+    applyUserLocation(user);
+    onSuccess?.(lastKnownUserLocation);
+  }, err => {
+    onError?.(err);
+  }, { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+}
 function initMap(){
   if(!hasLeaflet || !$('map')) {
     const info = $('aedInfo');
@@ -2920,16 +2942,27 @@ function renderMap(user=null){
 }
 renderMap();
 $('gpsBtn').onclick = () => {
-  if(!navigator.geolocation) return alert('Ta przeglądarka nie obsługuje geolokalizacji.');
-  navigator.geolocation.getCurrentPosition(pos => {
-    const user = { lat: pos.coords.latitude, lon: pos.coords.longitude };
-    $('gpsLocation').value = `${user.lat.toFixed(6)}, ${user.lon.toFixed(6)}`;
-    renderAeds(user, $('aedSearch').value || '');
-    renderMap(user);
-  }, err => alert('Nie udało się pobrać GPS: ' + err.message), { enableHighAccuracy:true, timeout:10000, maximumAge:0 });
+  requestCurrentUserLocation(null, err => alert('Nie udało się pobrać GPS: ' + err.message));
 };
 $('findNearestAedBtn').onclick = () => $('gpsBtn').click();
-$('openExternalAedMapBtn').onclick = () => window.open('https://openaedmap.org/', '_blank');
+$('openExternalAedMapBtn').onclick = () => {
+  if(lastKnownUserLocation){
+    window.open(buildOpenAedMapUrl(lastKnownUserLocation), '_blank');
+    return;
+  }
+  const popup = window.open('', '_blank');
+  if(!popup){
+    alert('Przeglądarka zablokowała otwarcie OpenAEDMap. Zezwól na wyskakujące okna i spróbuj ponownie.');
+    return;
+  }
+  popup.document.write('<!doctype html><title>OpenAEDMap</title><p style="font-family:system-ui;padding:16px">Pobieranie lokalizacji...</p>');
+  popup.document.close();
+  requestCurrentUserLocation(user => {
+    popup.location.replace(buildOpenAedMapUrl(user));
+  }, () => {
+    popup.location.replace(buildOpenAedMapUrl());
+  });
+};
 $('aedSearch').addEventListener('input', e => renderAeds(null, e.target.value));
 $('kitSearch').addEventListener('input', e => renderKits(e.target.value));
 if ($('kitZoneFilter')) $('kitZoneFilter').addEventListener('change', () => { kitZoneFilterTouched = true; renderKits($('kitSearch').value || ''); });
