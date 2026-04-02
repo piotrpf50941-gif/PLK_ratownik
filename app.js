@@ -24,7 +24,10 @@ const STORAGE_KEYS = {
   topicCategoryPriority: 'pp_v11_topic_category_priority',
   appNoticeSeen: 'pp_v11_app_notice_seen',
   remoteTablePresence: 'pp_v11_remote_table_presence',
-  notificationInbox: 'pp_v11_notification_inbox'
+  notificationInbox: 'pp_v11_notification_inbox',
+  syncLastSuccessAt: 'pp_v11_sync_last_success_at',
+  pendingLocalChanges: 'pp_v11_pending_local_changes',
+  lastSyncError: 'pp_v11_last_sync_error'
 };
 const defaultRescuers = [
   { id:'r1', name:'Jan Kowalski', phone:'600100200', zone:'ZLK Poznań', location:'Posterunek główny', shift:'Dzienna', skills:'KPP, AED', active:true, alarmGroup:true },
@@ -208,11 +211,26 @@ const supabaseClient = (hasRealSupabaseConfig && window.supabase)
     })
   : null;
 const ONLINE_TABLES = ['rescuers','aeds','kits','topics','algorithms','app_settings'];
+const QUICK_FILTERS = [
+  { label:'RKO', keywords:['rko','resuscytacja','aed'] },
+  { label:'krwotok', keywords:['krwotok','krwotoki','krwawienie','staza'] },
+  { label:'dziecko', keywords:['dziecko','dzieci','dzieciece','dziecięce','niemowle','niemowlę','pediatryczne'] },
+  { label:'kolej', keywords:['kolej','kolejowy','kolejowe','pkp','tor','wypadek kolejowy'] },
+  { label:'oparzenie', keywords:['oparzenie','oparzenia','hydrozel','hydrożel','parzacy','parzący'] },
+  { label:'ciąża', keywords:['ciaza','ciąża','ciazy','ciąży','kobieta w ciąży','porod','poród'] }
+];
 let isApplyingRemoteState = false;
 let onlineSyncTimer = null;
 let onlineRealtimeChannel = null;
 let onlineRefreshTimer = null;
 let onlineSessionEmail = '';
+let activeTopicQuickFilter = '';
+let activeAlgorithmQuickFilter = '';
+let lastSyncSuccessAt = localStorage.getItem(STORAGE_KEYS.syncLastSuccessAt) || '';
+let pendingLocalChanges = Math.max(0, Number(localStorage.getItem(STORAGE_KEYS.pendingLocalChanges) || '0') || 0);
+let lastSyncError = localStorage.getItem(STORAGE_KEYS.lastSyncError) || '';
+let syncStatusMessage = hasRealSupabaseConfig ? 'Połączenie online gotowe.' : 'Tryb online wyłączony. Działanie lokalne.';
+let suppressLocalChangeTracking = false;
 const $ = id => document.getElementById(id);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
 const safeColor = color => /^#[0-9a-fA-F]{6}$/.test(String(color||'')) ? String(color) : '#d92c2c';
@@ -220,6 +238,10 @@ const safeFontSize = size => {
   const allowed = ['0.9em','1em','1.1em','1.2em','1.35em','1.5em'];
   return allowed.includes(String(size||'')) ? String(size) : '1.2em';
 };
+const normalizeSearchText = value => String(value ?? '')
+  .toLowerCase()
+  .normalize('NFD')
+  .replace(/[\u0300-\u036f]/g, '');
 
 function normalizeOfflineAlgorithmIds(){
   const valid = new Set(algorithms.map((a, idx) => normalizeAlgorithm(a, idx).id));
@@ -364,6 +386,55 @@ function formatOnlineError(error){
     return `${base}. Zaktualizuj schemat Supabase, uruchamiając najnowszy plik SUPABASE_SETUP.sql w SQL Editor.`;
   }
   return base;
+}
+function persistSyncState(){
+  localStorage.setItem(STORAGE_KEYS.syncLastSuccessAt, String(lastSyncSuccessAt || ''));
+  localStorage.setItem(STORAGE_KEYS.pendingLocalChanges, String(Math.max(0, Number(pendingLocalChanges) || 0)));
+  localStorage.setItem(STORAGE_KEYS.lastSyncError, String(lastSyncError || ''));
+}
+function formatSyncMoment(value){
+  if(!value) return 'Jeszcze nie wykonywano.';
+  const date = new Date(value);
+  if(Number.isNaN(date.getTime())) return 'Brak danych';
+  return date.toLocaleString('pl-PL');
+}
+function updateSyncStatusDisplay(){
+  const lastEl = $('syncLastSuccessValue');
+  if(lastEl) lastEl.textContent = formatSyncMoment(lastSyncSuccessAt);
+  const statusEl = $('syncStatusMessageValue');
+  if(statusEl) statusEl.textContent = syncStatusMessage || (hasOnlineConfig() ? 'Połączenie online gotowe.' : 'Tryb online wyłączony. Działanie lokalne.');
+  const pendingBadge = $('syncPendingChangesBadge');
+  if(pendingBadge){
+    pendingBadge.textContent = `Zmiany lokalne: ${pendingLocalChanges}`;
+    pendingBadge.classList.toggle('is-pending', pendingLocalChanges > 0);
+  }
+  const errorBox = $('syncLastErrorBox');
+  const errorValue = $('syncLastErrorValue');
+  if(errorValue) errorValue.textContent = lastSyncError || '';
+  if(errorBox) errorBox.hidden = !lastSyncError;
+}
+function recordLocalChange(){
+  if(isApplyingRemoteState || suppressLocalChangeTracking) return;
+  pendingLocalChanges += 1;
+  persistSyncState();
+  updateSyncStatusDisplay();
+  if(hasOnlineConfig()) scheduleOnlineSync();
+}
+function recordSyncSuccess({ resetPending=false, message='', silent=false }={}){
+  lastSyncSuccessAt = new Date().toISOString();
+  if(resetPending) pendingLocalChanges = 0;
+  lastSyncError = '';
+  persistSyncState();
+  if(message) syncStatusMessage = message;
+  updateSyncStatusDisplay();
+  if(message && !silent) updateOnlineStatus(message, 'ok');
+}
+function recordSyncError(message, { silent=false }={}){
+  if(message) lastSyncError = String(message).trim();
+  persistSyncState();
+  if(message) syncStatusMessage = String(message).trim();
+  updateSyncStatusDisplay();
+  if(message && !silent) updateOnlineStatus(syncStatusMessage, 'warn');
 }
 function serializeRowForOnline(table, row, idx=0){
   if(table === 'rescuers'){
@@ -513,6 +584,7 @@ async function syncAllOnline(options={}){
   if(!options.skipReload){
     await loadOnlineData({ silent:true, allowEmptyTables:true });
   }
+  recordSyncSuccess({ resetPending:true, message: options.skipReload ? 'Zmiany zapisane online.' : 'Synchronizacja online zakończona.', silent:false });
 }
 function scheduleOnlineSync(){
   if(!hasOnlineConfig() || isApplyingRemoteState) return;
@@ -522,9 +594,8 @@ function scheduleOnlineSync(){
       const sessionResp = await supabaseClient.auth.getSession();
       if(!sessionResp?.data?.session) return;
       await syncAllOnline({ skipReload:true });
-      updateOnlineStatus('Zmiany zapisane online.', 'ok');
     }catch(err){
-      updateOnlineStatus(`Zmiany zapisano lokalnie. Online: ${err.message}`, 'warn');
+      recordSyncError(`Zmiany zapisano lokalnie. Online: ${formatOnlineError(err)}`);
     }
   }, Number(cfg.autoSyncDelayMs || 900));
 }
@@ -557,11 +628,11 @@ normalizeAppInfo();
     saveLocal();
     renderAll();
     renderMap();
-    if(!options.silent) updateOnlineStatus('Pobrano aktualne dane online.', 'ok');
+    recordSyncSuccess({ resetPending:false, message: options.silent ? '' : 'Pobrano aktualne dane online.', silent: options.silent });
     return true;
   }catch(err){
     const message = formatOnlineError(err);
-    if(!options.silent) updateOnlineStatus(`Nie udało się pobrać danych online: ${message}`, 'warn');
+    if(!options.silent) recordSyncError(`Nie udało się pobrać danych online: ${message}`);
     return false;
   }finally{
     isApplyingRemoteState = false;
@@ -594,12 +665,16 @@ function ensureOnlineAdminBox(){
 function updateOnlineStatus(message, mode='info'){
   if (hasOnlineConfig()) ensureOnlineAdminBox();
   const el = $('onlineStatusBox');
+  syncStatusMessage = String(message || '').trim() || syncStatusMessage;
+  updateSyncStatusDisplay();
   if(!el) return;
   el.textContent = message;
   el.style.color = mode === 'ok' ? 'var(--ok)' : (mode === 'warn' ? 'var(--amber)' : '');
 }
 async function refreshOnlineSessionInfo(){
   if(!hasOnlineConfig()){
+    syncStatusMessage = 'Tryb online wyłączony. Uzupełnij config.js.';
+    updateSyncStatusDisplay();
     updateOnlineStatus('Tryb online wyłączony. Uzupełnij config.js.', 'warn');
     return null;
   }
@@ -1128,6 +1203,7 @@ function setDefaultRescuerForZone(zone, rescuerId, actorRole='Administrator'){
   const previousId = map[normalizedZone] || '';
   map[normalizedZone] = rescuerId;
   saveDefaultRescuerMap(map);
+  recordLocalChange();
   logChangeSync(makeHistoryPayload({
     actorRole,
     action:'Ustawienie domyślnego ratownika',
@@ -1845,7 +1921,93 @@ normalizeAppInfo();
   localStorage.setItem(STORAGE_KEYS.appNotice, JSON.stringify(appNotice));
   localStorage.setItem(STORAGE_KEYS.eventTypes, JSON.stringify(eventTypes));
   localStorage.setItem(STORAGE_KEYS.topicCategoryPriority, JSON.stringify(topicCategoryPriority));
-  if(!isApplyingRemoteState) scheduleOnlineSync();
+  recordLocalChange();
+}
+function buildAppBackupPayload(){
+  sanitizeState();
+  normalizeOfflineAlgorithmIds();
+  normalizeAppInfo();
+  normalizeTopicCategoryPriorityState();
+  sanitizeHistoryState();
+  sanitizeAlarmHistory();
+  sanitizeNotificationInbox();
+  return {
+    app: 'Ratownik PLK',
+    backupVersion: 1,
+    createdAt: new Date().toISOString(),
+    dataVersion: 'pp_v11',
+    theme: localStorage.getItem(STORAGE_KEYS.theme) || 'light',
+    defaultZone: localStorage.getItem(STORAGE_KEYS.defaultZone) || '',
+    defaultRescuerByZone: deepClone(getDefaultRescuerMap()),
+    rescuers: deepClone(rescuers),
+    aeds: deepClone(aeds),
+    kits: deepClone(kits),
+    topics: deepClone(topics),
+    algorithms: deepClone(algorithms),
+    offlineAlgorithmIds: deepClone(offlineAlgorithmIds),
+    appInfo: deepClone(appInfo),
+    appNotice: deepClone(appNotice),
+    eventTypes: deepClone(eventTypes),
+    topicCategoryPriority: deepClone(topicCategoryPriority),
+    changeHistory: deepClone(changeHistory),
+    alarmHistory: deepClone(alarmHistory),
+    notificationInbox: deepClone(notificationInbox)
+  };
+}
+async function importAppBackup(file){
+  if(!file) return;
+  const rawText = await file.text();
+  let payload = null;
+  try{
+    payload = JSON.parse(rawText);
+  }catch(_){
+    throw new Error('Plik kopii nie jest poprawnym JSON-em.');
+  }
+  if(!payload || typeof payload !== 'object'){
+    throw new Error('Plik kopii ma nieprawidłową strukturę.');
+  }
+  const looksLikeBackup = payload.app === 'Ratownik PLK' || ['rescuers','aeds','kits','topics','algorithms'].some(key => Array.isArray(payload[key]));
+  if(!looksLikeBackup){
+    throw new Error('Plik nie wygląda na kopię aplikacji Ratownik PLK.');
+  }
+  suppressLocalChangeTracking = true;
+  try{
+    if(Array.isArray(payload.rescuers)) rescuers = payload.rescuers.map((item, idx) => normalizeRescuer(item, idx));
+    if(Array.isArray(payload.aeds)) aeds = payload.aeds.map((item, idx) => normalizeOnlineRow('aeds', item, idx));
+    if(Array.isArray(payload.kits)) kits = payload.kits.map((item, idx) => normalizeKit(item, idx));
+    if(Array.isArray(payload.topics)) topics = payload.topics.map((item, idx) => normalizeTopic(item, idx));
+    if(Array.isArray(payload.algorithms)) algorithms = payload.algorithms.map((item, idx) => normalizeAlgorithm(item, idx));
+    if(Array.isArray(payload.offlineAlgorithmIds)) offlineAlgorithmIds = payload.offlineAlgorithmIds;
+    if(payload.appInfo && typeof payload.appInfo === 'object') appInfo = payload.appInfo;
+    if(payload.appNotice && typeof payload.appNotice === 'object') appNotice = payload.appNotice;
+    if(Array.isArray(payload.eventTypes)) eventTypes = payload.eventTypes.map(x => String(x || '').trim()).filter(Boolean);
+    if(Array.isArray(payload.topicCategoryPriority)) topicCategoryPriority = payload.topicCategoryPriority.map(x => String(x || '').trim()).filter(Boolean);
+    if(Array.isArray(payload.changeHistory)) changeHistory = payload.changeHistory;
+    if(Array.isArray(payload.alarmHistory)) alarmHistory = payload.alarmHistory;
+    if(Array.isArray(payload.notificationInbox)) notificationInbox = payload.notificationInbox;
+    if(payload.defaultRescuerByZone && typeof payload.defaultRescuerByZone === 'object') saveDefaultRescuerMap(payload.defaultRescuerByZone);
+    if(Object.prototype.hasOwnProperty.call(payload, 'defaultZone')){
+      const zone = String(payload.defaultZone || '').trim();
+      if(zone) localStorage.setItem(STORAGE_KEYS.defaultZone, zone);
+      else localStorage.removeItem(STORAGE_KEYS.defaultZone);
+    }
+    saveLocal();
+    sanitizeHistoryState();
+    sanitizeAlarmHistory();
+    saveNotificationInbox();
+    localStorage.setItem(STORAGE_KEYS.changeHistory, JSON.stringify(changeHistory));
+    localStorage.setItem(STORAGE_KEYS.alarmHistory, JSON.stringify(alarmHistory));
+    if(payload.theme) setTheme(String(payload.theme) === 'dark' ? 'dark' : 'light');
+  }finally{
+    suppressLocalChangeTracking = false;
+  }
+  pendingLocalChanges = Math.max(0, pendingLocalChanges) + 1;
+  lastSyncError = '';
+  syncStatusMessage = 'Zaimportowano kopię lokalnie. Wykonaj synchronizację, aby wysłać dane online.';
+  persistSyncState();
+  renderAll();
+  renderMap();
+  updateOnlineStatus(syncStatusMessage, hasOnlineConfig() ? 'info' : 'warn');
 }
 function uniqueValues(arr){ return [...new Set(arr.filter(Boolean))].sort((a,b)=>a.localeCompare(b,'pl')); }
 function populateSelect(selectId, values, placeholder){
@@ -2156,15 +2318,39 @@ function renderTopicCard(topic, displayNumber=null){
     </details>
   `;
 }
+function getQuickFilterKeywords(value){
+  const match = QUICK_FILTERS.find(item => item.label === value);
+  return (match?.keywords || [value || '']).map(normalizeSearchText).filter(Boolean);
+}
+function matchesQuickFilter(haystack, activeFilter){
+  if(!activeFilter) return true;
+  const needles = getQuickFilterKeywords(activeFilter);
+  return needles.some(needle => haystack.includes(needle));
+}
+function renderQuickFilterButtons(){
+  document.querySelectorAll('[data-quick-filter-target]').forEach(btn => {
+    const target = btn.dataset.quickFilterTarget || '';
+    const filter = btn.dataset.quickFilter || '';
+    const isActive = target === 'topics'
+      ? activeTopicQuickFilter === filter
+      : activeAlgorithmQuickFilter === filter;
+    btn.classList.toggle('active', isActive);
+    btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+  });
+}
 function renderTopics(query=''){
-  const q = query.trim().toLowerCase();
+  const q = normalizeSearchText(query.trim());
+  const activeFilter = activeTopicQuickFilter;
   renumberTopics();
   const normalizedTopics = topics.map((t, idx) => normalizeTopic(t, idx));
   const topicCategoryIndexMap = buildTopicCategoryIndexMap(normalizedTopics);
-  const filtered = normalizedTopics.filter(t => !q || [t.category, t.t, t.icon, t.leadTitle, t.lead, t.externalLink, t.externalLinkLabel, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' ').toLowerCase().includes(q));
+  const filtered = normalizedTopics.filter(t => {
+    const haystack = normalizeSearchText([t.category, t.t, t.icon, t.leadTitle, t.lead, t.externalLink, t.externalLinkLabel, ...(t.s||[]).flatMap(sec => [sec[1], ...(Array.isArray(sec[2]) ? sec[2] : [sec[2]])])].join(' '));
+    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
+  });
   const grouped = groupTopicsByCategory(filtered);
   $('topics').innerHTML = grouped.map(group => `
-    <details class="topic-category" ${q ? 'open' : ''}>
+    <details class="topic-category" ${(q || activeFilter) ? 'open' : ''}>
       <summary>
         <span class="topic-category-title">
           <span class="topic-category-badge">${esc(group.category)}</span>
@@ -2190,8 +2376,12 @@ function getAlgorithmById(id){
   return algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).find(a => a.id === id) || algorithms.map((a, idx) => normalizeAlgorithm(a, idx))[0] || null;
 }
 function renderAlgorithms(query=''){
-  const q = query.trim().toLowerCase();
-  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || [a.title, a.category, a.icon, ...(a.steps || [])].join(' ').toLowerCase().includes(q));
+  const q = normalizeSearchText(query.trim());
+  const activeFilter = activeAlgorithmQuickFilter;
+  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => {
+    const haystack = normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' '));
+    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
+  });
   $('algorithmList').innerHTML = filtered.map(a => `
     <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
       <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
@@ -2204,8 +2394,12 @@ function renderAlgorithms(query=''){
   `).join('') || '<div class="empty-state">Brak algorytmów pasujących do wyszukiwania.</div>';
 }
 function renderAlgorithms(query=''){
-  const q = query.trim().toLowerCase();
-  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => !q || [a.title, a.category, a.icon, ...(a.steps || [])].join(' ').toLowerCase().includes(q));
+  const q = normalizeSearchText(query.trim());
+  const activeFilter = activeAlgorithmQuickFilter;
+  const filtered = algorithms.map((a, idx) => normalizeAlgorithm(a, idx)).filter(a => {
+    const haystack = normalizeSearchText([a.title, a.category, a.icon, ...(a.steps || [])].join(' '));
+    return (!q || haystack.includes(q)) && matchesQuickFilter(haystack, activeFilter);
+  });
   $('algorithmList').innerHTML = filtered.map(a => `
     <button class="algo-card ${a.id === currentAlgorithmId ? 'active' : ''}" data-select-algo="${esc(a.id)}">
       <span class="algo-card-icon">${esc(a.icon || '🧭')}</span>
@@ -2764,6 +2958,8 @@ normalizeAppInfo();
   renderOfflineSummary();
   renderNotificationInbox();
   renderAppNotice();
+  renderQuickFilterButtons();
+  updateSyncStatusDisplay();
 }
 function renderNotificationInbox(){
   sanitizeNotificationInbox();
@@ -2873,9 +3069,21 @@ if ($('openOfflineInlineBtn')) $('openOfflineInlineBtn').onclick = () => { if($(
 if ($('openOfflineBtnInline')) $('openOfflineBtnInline').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = false; renderOfflineSummary(); };
 if ($('closeOfflineBtn')) $('closeOfflineBtn').onclick = () => { if($('offlineModal')) $('offlineModal').hidden = true; };
 $('topicSearch').addEventListener('input', e => renderTopics(e.target.value));
-$('clearTopicSearchBtn').onclick = () => { $('topicSearch').value = ''; renderTopics(''); };
+$('clearTopicSearchBtn').onclick = () => { activeTopicQuickFilter = ''; $('topicSearch').value = ''; renderTopics(''); renderQuickFilterButtons(); };
 $('algorithmSearch').addEventListener('input', e => renderAlgorithms(e.target.value));
-$('clearAlgorithmSearchBtn').onclick = () => { $('algorithmSearch').value = ''; renderAlgorithms(''); };
+$('clearAlgorithmSearchBtn').onclick = () => { activeAlgorithmQuickFilter = ''; $('algorithmSearch').value = ''; renderAlgorithms(''); renderQuickFilterButtons(); };
+document.querySelectorAll('[data-quick-filter-target]').forEach(btn => btn.addEventListener('click', () => {
+  const target = btn.dataset.quickFilterTarget || '';
+  const filter = btn.dataset.quickFilter || '';
+  if(target === 'topics'){
+    activeTopicQuickFilter = activeTopicQuickFilter === filter ? '' : filter;
+    renderTopics($('topicSearch')?.value || '');
+  }else if(target === 'algorithms'){
+    activeAlgorithmQuickFilter = activeAlgorithmQuickFilter === filter ? '' : filter;
+    renderAlgorithms($('algorithmSearch')?.value || '');
+  }
+  renderQuickFilterButtons();
+}));
 $('algoPrevBtn').onclick = () => { currentAlgorithmStep = Math.max(0, currentAlgorithmStep - 1); renderAlgorithmStepper(); };
 $('algoNextBtn').onclick = () => { const algo = normalizeAlgorithm(getAlgorithmById(currentAlgorithmId) || {}, 0); if(algo) currentAlgorithmStep = Math.min(algo.steps.length - 1, currentAlgorithmStep + 1); renderAlgorithmStepper(); };
 $('algoResetBtn').onclick = () => { currentAlgorithmStep = 0; renderAlgorithmStepper(); };
@@ -3490,6 +3698,26 @@ $('exportAlgorithmsDocBtn').onclick = () => {
   exportBlob('pkp_plk_algorytmy_ratunkowe.doc', content, 'application/msword');
 };
 $('exportAlgorithmsHtmlBtn').onclick = () => exportBlob('pkp_plk_algorytmy_ratunkowe.html', algorithmExportHtml(), 'text/html');
+if ($('exportAppBackupBtn')) $('exportAppBackupBtn').onclick = () => {
+  const payload = buildAppBackupPayload();
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+  exportBlob(`ratownik_plk_kopia_${stamp}.json`, JSON.stringify(payload, null, 2), 'application/json;charset=utf-8');
+  syncStatusMessage = 'Wyeksportowano kopię lokalną.';
+  updateSyncStatusDisplay();
+};
+if ($('importAppBackupBtn')) $('importAppBackupBtn').onclick = () => $('importAppBackupFile')?.click();
+if ($('importAppBackupFile')) $('importAppBackupFile').onchange = async e => {
+  const file = e.target.files?.[0];
+  e.target.value = '';
+  if(!file) return;
+  if(!confirm('Import kopii zastąpi bieżące dane lokalne aplikacji. Czy chcesz kontynuować?')) return;
+  try{
+    await importAppBackup(file);
+    alert('Zaimportowano kopię zapasową.');
+  }catch(err){
+    alert('Nie udało się zaimportować kopii: ' + (err?.message || err));
+  }
+};
 if($('printAlgorithmsBtn')) $('printAlgorithmsBtn').onclick = () => printAlgorithms();
 if($('printAlgorithmsPublicBtn')) $('printAlgorithmsPublicBtn').onclick = () => printAlgorithms();
 if($('printAlgorithmsStepperBtn')) $('printAlgorithmsStepperBtn').onclick = () => printAlgorithms();
@@ -3718,8 +3946,9 @@ $('syncBtn').onclick = async () => {
     await syncAllOnline({ skipReload:false });
     alert('Synchronizacja zakończona.');
   }catch(e){
-    alert('Błąd synchronizacji: ' + e.message);
-    updateOnlineStatus(`Błąd synchronizacji: ${e.message}`, 'warn');
+    const message = formatOnlineError(e);
+    recordSyncError(`Błąd synchronizacji: ${message}`);
+    alert('Błąd synchronizacji: ' + message);
   }
 };
 // PWA install + SW

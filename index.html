@@ -112,6 +112,14 @@
           <input id="topicSearch" class="search-input wide" placeholder="Szukaj tematów lub kategorii, np. zadławienia, RKO, kolej, aplikacja">
           <button class="ghost" id="clearTopicSearchBtn">Wyczyść</button>
         </div>
+        <div class="quick-filter-row" id="topicQuickFilters" aria-label="Szybkie filtry tematów">
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="RKO">RKO</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="krwotok">krwotok</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="dziecko">dziecko</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="kolej">kolej</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="oparzenie">oparzenie</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="topics" data-quick-filter="ciąża">ciąża</button>
+        </div>
         <div id="topics"></div>
       </section>
     </section>
@@ -148,6 +156,14 @@
         <div class="search-row">
           <input id="algorithmSearch" class="search-input wide" placeholder="Szukaj algorytmu, np. RKO dziecko, porażenie prądem, wypadek kolejowy">
           <button class="ghost" id="clearAlgorithmSearchBtn">Wyczyść</button>
+        </div>
+        <div class="quick-filter-row" id="algorithmQuickFilters" aria-label="Szybkie filtry algorytmów">
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="RKO">RKO</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="krwotok">krwotok</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="dziecko">dziecko</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="kolej">kolej</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="oparzenie">oparzenie</button>
+          <button class="ghost quick-filter-chip" type="button" data-quick-filter-target="algorithms" data-quick-filter="ciąża">ciąża</button>
         </div>
         <div id="algorithmList" class="algo-list"></div>
       </section>
@@ -209,10 +225,31 @@
           <h2>Panel administratora online-ready</h2>
           <div class="row">
             <button class="ghost" id="syncBtn">Synchronizuj</button>
+            <button class="ghost" id="exportAppBackupBtn">Eksport kopii</button>
+            <button class="ghost" id="importAppBackupBtn">Import kopii</button>
+            <input id="importAppBackupFile" type="file" accept=".json,application/json" hidden>
             <button class="ghost danger-lite" id="resetLocalBtn">Reset lokalny</button>
           </div>
         </div>
         <p class="note">Panel administratora jest zabezpieczony hasłem. Bez konfiguracji backendu działa lokalnie. Po uzupełnieniu <code>config.js</code> może synchronizować dane online przez Supabase.</p>
+        <section class="admin-password-box sync-status-box">
+          <div class="card-head wrap-mobile sync-status-head">
+            <h3>Status synchronizacji</h3>
+            <span id="syncPendingChangesBadge" class="badge">Zmiany lokalne: 0</span>
+          </div>
+          <div class="sync-status-grid">
+            <div class="sync-status-item">
+              <strong>Ostatnia synchronizacja</strong>
+              <span id="syncLastSuccessValue">Jeszcze nie wykonywano.</span>
+            </div>
+            <div class="sync-status-item">
+              <strong>Status</strong>
+              <span id="syncStatusMessageValue">Tryb lokalny.</span>
+            </div>
+          </div>
+          <div id="syncLastErrorBox" class="note" hidden>Ostatni błąd: <span id="syncLastErrorValue"></span></div>
+          <p class="note">Eksport kopii zapisuje dane lokalne i ustawienia aplikacji. Import nadpisuje bieżące dane lokalne, ale nie przenosi aktywnej sesji online.</p>
+        </section>
         <div class="admin-password-box">
           <h3>Zmiana hasła administratora</h3>
           <div class="grid2">

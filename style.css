@@ -57,6 +57,10 @@ button.solid.amber{background:var(--amber);color:#fff}
 .search-row{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
 .search-input{max-width:360px}
 .search-input.wide{flex:1;max-width:none}
+.quick-filter-row{display:flex;gap:8px;flex-wrap:wrap;margin:-2px 0 12px}
+.quick-filter-chip{border-radius:999px;padding:9px 12px}
+.quick-filter-chip.active{background:var(--blue);color:#fff}
+body.night-mode .quick-filter-chip.active{background:#2a6dd9;color:#fff}
 #topics,.algo-list{display:grid;gap:12px}
 .topic-category{border:1px solid var(--line);border-radius:22px;overflow:hidden;background:linear-gradient(180deg,rgba(11,79,162,.06),rgba(11,79,162,.02));box-shadow:var(--shadow)}
 .topic-category summary{list-style:none;cursor:pointer;padding:16px 18px;font-weight:900;display:flex;justify-content:space-between;align-items:center;gap:12px}
@@ -134,6 +138,13 @@ body.night-mode .algo-card.active{background:#17283d}
 .note{margin:10px 0 0;color:var(--muted)}
 .empty-state{border:1px dashed var(--line);border-radius:16px;padding:18px;background:var(--surface);color:var(--muted)}
 .admin-topic-layout{align-items:start}
+.sync-status-box{display:grid;gap:12px}
+.sync-status-head{margin-bottom:0}
+.sync-status-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.sync-status-item{display:grid;gap:4px;padding:12px 14px;border:1px solid var(--line);border-radius:14px;background:var(--card)}
+.sync-status-item strong{font-size:.95rem}
+.sync-status-item span{line-height:1.45}
+.sync-status-box .badge.is-pending{background:#ffe8c2;color:#8a6208}
 .bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:40;background:var(--card);border-top:1px solid var(--line);display:grid;gap:8px;padding:10px 12px}
 .bottom-nav.five-tabs{grid-template-columns:repeat(5,1fr)}
 .bottom-nav button{background:#edf4ff;color:var(--blue);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;min-height:58px}
@@ -149,7 +160,7 @@ body.night-mode code{background:#1a2940;color:#e4efff}
   .grid3-admin{grid-template-columns:1fr}
 }
 @media (max-width:900px){
-  .hero-grid,.grid2,.topic-body,.admin-topic-layout{grid-template-columns:1fr}
+  .hero-grid,.grid2,.topic-body,.admin-topic-layout,.sync-status-grid{grid-template-columns:1fr}
 }
 @media (max-width:640px){
   body{padding-bottom:102px}
